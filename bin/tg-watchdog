@@ -26,13 +26,14 @@ file, or without the script, only Telegram is used.
 
 Change for your setup (environment variables in the launchd plist):
   ASSISTANT_NAME, ASSISTANT_HOME, TG_TIMEZONE, TG_MACHINE_LABEL, and BUN if
-  bun is not at /opt/homebrew/bin/bun.
+  bun is not on the PATH.
 The bot token is read from the bot's .env and never printed or logged.
 """
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -55,12 +56,13 @@ IMSG = os.environ.get("TG_WATCHDOG_IMSG", str(REPO / "bin/imsg.py"))
 RESTART_WAIT_S = float(os.environ.get("TG_WATCHDOG_RESTART_WAIT_S", "25"))
 NO_RESTART = os.environ.get("TG_WATCHDOG_NO_RESTART") == "1"
 
-BUN = os.environ.get("BUN", "/opt/homebrew/bin/bun")
+BUN = os.environ.get("BUN") or shutil.which("bun") or "/opt/homebrew/bin/bun"
 LABEL = os.environ.get("TG_LAUNCHD_LABEL", f"com.{SLUG}.telegram-gateway")
 STATE = GW_DIR / "watchdog.json"
 LOG = GW_DIR / "watchdog.log"
 REALERT_S = 30 * 60
 SIGNATURE = os.environ.get("TG_SIGNATURE", f"- EA {EA_NAME}")
+os.umask(0o077)
 
 
 def log(msg: str) -> None:
@@ -107,7 +109,7 @@ def token() -> str | None:
     try:
         for line in (BOT_DIR / ".env").read_text().splitlines():
             if line.startswith("TELEGRAM_BOT_TOKEN="):
-                return line.split("=", 1)[1].strip()
+                return line.split("=", 1)[1].strip().strip('"').strip("'")
     except OSError:
         pass
     return None
@@ -149,8 +151,15 @@ def imessage(text: str) -> bool:
         return False
     if not to:
         return False
+    if not os.access(IMSG, os.X_OK):
+        log(f"no iMessage alert: {IMSG} is missing or not executable")
+        return False
     # The text script appends its own signature.
-    r = subprocess.run([IMSG, "--to", to, text, "--send"], capture_output=True, text=True, timeout=120)
+    try:
+        r = subprocess.run([IMSG, "--to", to, text, "--send"], capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log(f"iMessage alert failed: {type(e).__name__}")
+        return False
     if r.returncode != 0:
         log(f"iMessage alert failed (exit {r.returncode})")
     return r.returncode == 0
@@ -173,7 +182,9 @@ def load_state() -> dict:
 
 def save_state(s: dict) -> None:
     GW_DIR.mkdir(parents=True, exist_ok=True)
-    STATE.write_text(json.dumps(s) + "\n")
+    tmp = STATE.with_name(STATE.name + ".tmp")
+    tmp.write_text(json.dumps(s) + "\n")
+    os.replace(tmp, STATE)
 
 
 def main() -> int:

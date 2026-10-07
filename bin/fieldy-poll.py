@@ -3,7 +3,8 @@
 
 Fieldy is a wearable recorder (fieldy.ai). launchd runs this every five
 minutes. It asks the Fieldy Public API v2 for conversations that touch the
-window since the last run (minus a two hour overlap), and for each finished
+window since the last run (minus a 48 hour overlap, so a recording the phone
+syncs late still lands), and for each finished
 one it has not seen at that updatedAt it fetches the transcript segments and
 writes:
 
@@ -20,13 +21,17 @@ verbatim into the owner's private vault inbox and nowhere else.
 
 Credentials come only from $FIELDY_ENV_FILE, default ~/.config/fieldy/fieldy.env,
 mode 600 (FIELDY_API_KEY, optional FIELDY_LOCAL_TZ). Nothing here prints the
-key. Until that file exists the poller exits quietly, so launchd can be
-installed before the key arrives.
+key. Until that file exists the poller idles, logging one line a day, so
+launchd can be installed before the key arrives.
 
 Change for your setup (environment variables, or edit the defaults below):
   FIELDY_ENV_FILE   the env file holding the key and timezone
-  FIELDY_INCOMING   the drop zone folder for Fieldy files
+  VAULTS            parent folder of the vaults and _Incoming (required unless
+                    FIELDY_INCOMING is set)
+  FIELDY_INCOMING   the drop zone folder, default $VAULTS/_Incoming/fieldy
+  ASSISTANT_HOME    the assistant's folder (default ~/Tanya)
   FIELDY_STATE      runtime state: watermark, raw JSON, log
+                    (default $ASSISTANT_HOME/state/fieldy)
   FIELDY_LOCAL_TZ   (in the env file) IANA zone for file dates, default UTC
 
 Usage:
@@ -50,19 +55,28 @@ from zoneinfo import ZoneInfo
 
 HOME = Path.home()
 ENV_FILE = Path(os.environ.get("FIELDY_ENV_FILE") or HOME / ".config/fieldy/fieldy.env")
-INCOMING = Path(os.environ.get("FIELDY_INCOMING") or HOME / "Dev/Personal/_obsidian/_Incoming/fieldy")
-STATE = Path(os.environ.get("FIELDY_STATE") or HOME / "Tanya/state/fieldy")
+_VAULTS = os.environ.get("VAULTS")
+_INCOMING = os.environ.get("FIELDY_INCOMING") or (_VAULTS and f"{_VAULTS}/_Incoming/fieldy")
+INCOMING = Path(_INCOMING) if _INCOMING else None
+STATE = Path(os.environ.get("FIELDY_STATE") or Path(os.environ.get("ASSISTANT_HOME") or HOME / "Tanya") / "state/fieldy")
 API_BASE = os.environ.get("FIELDY_API_BASE") or "https://api.fieldy.ai/api/public/v2"
 RAW = STATE / "raw"
 SEEN = STATE / "seen.json"
 LOG = STATE / "poll.log"
-OVERLAP = timedelta(hours=2)
+OVERLAP = timedelta(hours=48)  # the window is by recording time; the seen set dedupes
 FIRST_RUN_LOOKBACK = timedelta(days=14)
 PAGE_SIZE = 50          # conversations per page (API max 50)
 SEG_PAGE_SIZE = 1000    # transcript segments per page (API max 1000)
 MAX_CONV_PAGES = 20
 MAX_SEG_PAGES = 10
 CALL_GAP = 0.7          # seconds between calls; the key allows 100 per 60 s
+os.umask(0o077)         # transcripts and logs are private
+
+
+def write_atomic(path: Path, text: str) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
 
 
 def log(msg: str) -> None:
@@ -132,7 +146,8 @@ def parse_iso(s: str | None) -> datetime | None:
     if not s:
         return None
     try:
-        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        s = re.sub(r"\.(\d+)", lambda m: "." + (m.group(1) + "000000")[:6], s.replace("Z", "+00:00"), count=1)
+        d = datetime.fromisoformat(s)
         return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
     except ValueError:
         return None
@@ -164,38 +179,30 @@ def seg_offset(seg: dict, started: datetime | None) -> float | None:
     return None
 
 
-def fetch_segments(key: str, conv: dict) -> list[dict]:
-    """All transcript segments for one conversation, by id first, by window second."""
+def segment_pages(key: str, params: dict) -> tuple[list[dict], bool]:
+    """Segments for one query, and whether every page was fetched."""
     segs: list[dict] = []
     cursor = None
     for _ in range(MAX_SEG_PAGES):
-        resp = api(key, "/transcriptions", {
-            "conversationId": conv["id"], "pageSize": SEG_PAGE_SIZE, "order": "asc", "cursor": cursor,
-        })
+        resp = api(key, "/transcriptions", {**params, "pageSize": SEG_PAGE_SIZE, "order": "asc", "cursor": cursor})
         items = resp.get("items") or []
         segs.extend(items)
         cursor = resp.get("nextCursor")
         if not cursor or not items:
-            break
+            return segs, True
+    return segs, False
+
+
+def fetch_segments(key: str, conv: dict) -> tuple[list[dict], bool]:
+    """All transcript segments for one conversation, by id first, by window second."""
+    segs, complete = segment_pages(key, {"conversationId": conv["id"]})
     if segs:
-        return segs
-    # Fallback: the conversation's own time window
-    cursor = None
-    for _ in range(MAX_SEG_PAGES):
-        resp = api(key, "/transcriptions", {
-            "startTime": conv.get("startTime"), "endTime": conv.get("endTime"),
-            "pageSize": SEG_PAGE_SIZE, "order": "asc", "cursor": cursor,
-        })
-        items = resp.get("items") or []
-        segs.extend(items)
-        cursor = resp.get("nextCursor")
-        if not cursor or not items:
-            break
-    return segs
+        return segs, complete
+    return segment_pages(key, {"startTime": conv.get("startTime"), "endTime": conv.get("endTime")})
 
 
 def yaml_str(s: str | None) -> str:
-    return '"' + (s or "").replace("\\", "\\\\").replace('"', "'").replace("\n", " ") + '"'
+    return json.dumps(s or "", ensure_ascii=False)  # a JSON string is a valid YAML scalar
 
 
 def render(conv: dict, segs: list[dict], tz: ZoneInfo) -> str:
@@ -210,16 +217,16 @@ def render(conv: dict, segs: list[dict], tz: ZoneInfo) -> str:
     lines = [
         "---",
         "source: fieldy",
-        f"fieldy_id: {conv.get('id', '')}",
+        f"fieldy_id: {yaml_str(conv.get('id'))}",
         f"title: {yaml_str(title)}",
         f"started: {conv.get('startTime') or ''}",
         f"ended: {conv.get('endTime') or ''}",
         f"duration: {duration}",
-        f"local_start: {started.astimezone(tz).strftime('%Y-%m-%d %H:%M') + ' ' + tz.key if started else ''}",
-        f"type: {conv.get('type') or ''}",
-        f"recording_source: [{', '.join(sources)}]",
-        f"speakers: [{', '.join(speakers)}]",
-        f"keywords: [{', '.join(k for k in (conv.get('keywords') or []) if k)}]",
+        f"local_start: {yaml_str(started.astimezone(tz).strftime('%Y-%m-%d %H:%M') + ' ' + tz.key if started else '')}",
+        f"type: {yaml_str(conv.get('type'))}",
+        f"recording_source: [{', '.join(yaml_str(s) for s in sources)}]",
+        f"speakers: [{', '.join(yaml_str(s) for s in speakers)}]",
+        f"keywords: [{', '.join(yaml_str(k) for k in (conv.get('keywords') or []) if k)}]",
         f"location: {yaml_str(place)}",
         f"calendar_event: {str(bool(conv.get('calendarEventId'))).lower()}",
         f"fieldy_updated: {conv.get('updatedAt') or ''}",
@@ -258,7 +265,7 @@ def render(conv: dict, segs: list[dict], tz: ZoneInfo) -> str:
 
 def check(env: dict | None) -> int:
     print(f"env file : {ENV_FILE} {'present' if env else 'MISSING (poller idles until it exists)'}")
-    print(f"incoming : {INCOMING}")
+    print(f"incoming : {INCOMING or 'NOT SET (set VAULTS or FIELDY_INCOMING)'}")
     print(f"state    : {STATE}")
     if not env:
         return 1
@@ -279,7 +286,17 @@ def main() -> int:
     if "--check" in sys.argv:
         return check(env)
     if env is None:
-        return 0  # key not configured yet; launchd keeps calling, nothing to do
+        # key not configured yet; launchd keeps calling, say so once a day
+        STATE.mkdir(parents=True, exist_ok=True)
+        marker = STATE / "env-missing"
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if not marker.exists() or marker.read_text().strip() != today:
+            log(f"idle: {ENV_FILE} does not exist yet")
+            marker.write_text(today)
+        return 0
+    if INCOMING is None:
+        log("ERROR set VAULTS (or FIELDY_INCOMING) in the launchd plist; nothing pulled")
+        return 1
     key = env["FIELDY_API_KEY"]
     tz = local_tz(env)
     force = os.environ.get("FORCE") == "1"
@@ -291,15 +308,27 @@ def main() -> int:
     since = (datetime.fromisoformat(seen["last_run"]) - OVERLAP) if seen.get("last_run") else now - FIRST_RUN_LOOKBACK
     since_s = since.strftime("%Y-%m-%dT%H:%M:%SZ")
     now_s = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    new = updated = skipped = ongoing = locked = 0
     cursor = None
+    # A run that hit the page cap saved its cursor and window; carry on from there.
+    resume = seen.get("resume")
+    if resume:
+        since_s, now_s, cursor = resume["since"], resume["until"], resume["cursor"]
+
+    new = updated = skipped = ongoing = locked = truncated = 0
     pages = 0
+    complete = True
     while True:
-        resp = api(key, "/conversations", {
-            "startTime": since_s, "endTime": now_s, "mode": "intersects-range",
-            "pageSize": PAGE_SIZE, "cursor": cursor,
-        })
+        try:
+            resp = api(key, "/conversations", {
+                "startTime": since_s, "endTime": now_s, "mode": "intersects-range",
+                "pageSize": PAGE_SIZE, "cursor": cursor,
+            })
+        except RuntimeError:
+            if resume and pages == 0:
+                seen.pop("resume")
+                write_atomic(SEEN, json.dumps(seen, indent=1))
+                log("WARN saved cursor rejected; the next run starts over")
+            raise
         items = resp.get("items") or []
         pages += 1
         for conv in items:
@@ -311,7 +340,7 @@ def main() -> int:
                 continue
             prev = seen["conversations"].get(cid)
             upd = conv.get("updatedAt") or ""
-            if prev and prev.get("updatedAt") == upd and not force:
+            if prev and not prev.get("locked") and prev.get("updatedAt") == upd and not force:
                 skipped += 1
                 continue
             if conv.get("locked"):
@@ -320,10 +349,14 @@ def main() -> int:
                     log(f"locked by plan window, skipped: {cid} {slug_title(conv.get('title'))}")
                 seen["conversations"][cid] = {"updatedAt": upd, "locked": True}
                 continue
-            segs = fetch_segments(key, conv)
+            segs, whole = fetch_segments(key, conv)
+            if not whole:
+                truncated += 1    # not marked seen, so a raised MAX_SEG_PAGES picks it up
+                log(f"WARN transcript for {cid} is over {MAX_SEG_PAGES * SEG_PAGE_SIZE} segments; not written, raise MAX_SEG_PAGES")
+                continue
             started = parse_iso(conv.get("startTime")) or now
             stem = f"{started.astimezone(tz).strftime('%Y-%m-%d %H%M')} {slug_title(conv.get('title'))}"
-            if any(v.get("stem") == stem for k, v in seen["conversations"].items() if k != cid):
+            if any((v.get("stem") or "").lower() == stem.lower() for k, v in seen["conversations"].items() if k != cid):
                 stem = f"{stem} ({cid[:6]})"
             target = INCOMING / f"{stem}.md"
             if prev and prev.get("stem") and not target.exists():
@@ -336,12 +369,20 @@ def main() -> int:
             new += 0 if prev else 1
             log(f"wrote {target.name} ({len(segs)} segments)")
         cursor = resp.get("nextCursor")
-        if not cursor or not items or pages >= MAX_CONV_PAGES:
+        if not cursor or not items:
+            break
+        if pages >= MAX_CONV_PAGES:
+            complete = False
             break
 
-    seen["last_run"] = now.isoformat()
-    SEEN.write_text(json.dumps(seen, indent=1))
-    log(f"done since={since_s} new={new} updated={updated} unchanged={skipped} ongoing={ongoing} locked={locked} pages={pages}")
+    if complete:
+        seen["last_run"] = datetime.fromisoformat(now_s.replace("Z", "+00:00")).isoformat()
+        seen.pop("resume", None)
+    else:
+        seen["resume"] = {"since": since_s, "until": now_s, "cursor": cursor}
+        log(f"WARN stopped at the {pages} page cap with more to fetch; the next run resumes from the saved cursor")
+    write_atomic(SEEN, json.dumps(seen, indent=1))
+    log(f"done since={since_s} new={new} updated={updated} unchanged={skipped} ongoing={ongoing} locked={locked} truncated={truncated} pages={pages}")
     return 0
 
 

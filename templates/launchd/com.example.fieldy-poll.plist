@@ -5,6 +5,11 @@
   <key>Label</key><string>com.<name>.fieldy-poll</string>
   <key>ProgramArguments</key>
   <array><string>/usr/bin/python3</string><string>/Users/<you>/<Name>/bin/fieldy-poll.py</string></array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ASSISTANT_HOME</key><string>/Users/<you>/<Name></string>
+    <key>VAULTS</key><string>/Users/<you>/<path-to-vaults-parent></string>
+  </dict>
   <key>StartInterval</key><integer>300</integer>
   <key>StandardOutPath</key><string>/Users/<you>/<Name>/state/fieldy/launchd.out</string>
   <key>StandardErrorPath</key><string>/Users/<you>/<Name>/state/fieldy/launchd.err</string>

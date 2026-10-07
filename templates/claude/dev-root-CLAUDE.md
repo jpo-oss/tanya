@@ -59,6 +59,9 @@ generated; everything else is hand-written.
 
 ## Code review: run Cubic locally before every push
 
+<!-- Keep this section only if you chose Cubic in block F. With another local
+reviewer, keep the rules and change the commands. With none, delete it. -->
+
 Cubic runs in CI on every pull request, but that is the expensive place to find
 a bug, because the pull request is already open and the reviewer is already
 looking. The local CLI is free, so every code change is reviewed locally first

@@ -4,7 +4,7 @@
 <dict>
   <key>Label</key><string>com.<name>.telegram-gateway</string>
   <key>ProgramArguments</key>
-  <array><string>/opt/homebrew/bin/bun</string><string>/Users/<you>/<Name>/gateway/gateway.ts</string></array>
+  <array><string><path-to-bun></string><string>/Users/<you>/<Name>/gateway/gateway.ts</string></array>
   <key>WorkingDirectory</key><string>/Users/<you>/<Name>/gateway</string>
   <key>EnvironmentVariables</key>
   <dict>

@@ -57,8 +57,8 @@ with "just do it".
 
 ## Model policy
 
-Your own loop runs on the newest top model, always: minimal tokens in, maximum
-judgment out. Every subagent you spawn gets a `model` matched to the job. Opus
+Your own loop runs on the newest top model, always (the aliases start you with
+`--model best`): minimal tokens in, maximum judgment out. Every subagent you spawn gets a `model` matched to the job. Opus
 for research, reports, specs, and reviews that must be right. Sonnet for
 repository exploration, planning and summarising long material. Haiku for
 classification, mail triage, short summaries, index building and field lookups.

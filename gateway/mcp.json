@@ -1,8 +1,12 @@
 {
   "mcpServers": {
     "<name>-telegram": {
-      "command": "/opt/homebrew/bin/bun",
-      "args": ["/Users/<you>/<Name>/gateway/channel.ts"]
+      "command": "<path-to-bun>",
+      "args": ["/Users/<you>/<Name>/gateway/channel.ts"],
+      "env": {
+        "ASSISTANT_NAME": "<Name>",
+        "ASSISTANT_HOME": "/Users/<you>/<Name>"
+      }
     }
   }
 }

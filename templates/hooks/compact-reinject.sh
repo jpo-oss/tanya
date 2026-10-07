@@ -7,11 +7,10 @@ set -u
 # ASSISTANT_HOME: the assistant's folder. ASSISTANT_NAME: what it is called.
 T="${ASSISTANT_HOME:-$HOME/Tanya}"
 name="${ASSISTANT_NAME:-Tanya}"
-# Only for the assistant's own sessions: started in its folder, or the
-# home-dir session the owner resumes with <name>-resume. Project sessions get
-# nothing from this.
+# Only for the assistant's own sessions, which start in its folder (both
+# aliases cd there). Project and home-dir sessions get nothing from this.
 cwd=$(jq -r '.cwd // empty' 2>/dev/null)
-case "$cwd" in "$T"|"$T"/*|"$HOME") ;; *) exit 0 ;; esac
+case "$cwd" in "$T"|"$T"/*) ;; *) exit 0 ;; esac
 log="$T/state/day-log.md"
 actions="$T/state/inbox-actions.jsonl"
 {

@@ -7,6 +7,10 @@
  *   cli.ts send CHAT TEXT    send a message through the gateway
  *
  * It connects as a "tool", so the gateway never hands it inbound messages.
+ *
+ * Derived from the telegram plugin in anthropics/claude-plugins-official
+ * (commit 1e96c6b), licensed Apache-2.0, and modified. See README.md.
+ * SPDX-License-Identifier: Apache-2.0
  */
 import { existsSync, readFileSync, readdirSync } from 'fs'
 import { GatewayClient } from './client'

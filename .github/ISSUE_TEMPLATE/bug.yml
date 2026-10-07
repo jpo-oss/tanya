@@ -1,0 +1,36 @@
+name: Something in the guide or the code is wrong
+description: A step failed, a file is broken, or the guide says something untrue.
+labels: [bug]
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: Guide section and step, or file and line.
+      placeholder: "GUIDE.md step 13, or gateway/gateway.ts:430"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what you got. Paste the real error text.
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Machine
+      description: OS and version, chip, Claude Code version (`claude --version`).
+      placeholder: "macOS 26.1, Apple silicon, Claude Code 2.1.290"
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I removed tokens, chat ids, phone numbers, email addresses and real paths from everything I pasted.
+          required: true
+        - label: I reproduced this myself. If an AI tool helped write this report, I checked every claim in it.
+          required: true

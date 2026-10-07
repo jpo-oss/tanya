@@ -19,6 +19,10 @@
  * which is the behaviour that caused the outages this replaces.
  *
  * Design: block G and step 13 of GUIDE.md.
+ *
+ * Derived from the telegram plugin in anthropics/claude-plugins-official
+ * (commit 1e96c6b), licensed Apache-2.0, and modified. See README.md.
+ * SPDX-License-Identifier: Apache-2.0
  */
 import { Bot, GrammyError, InputFile, type Context } from 'grammy'
 import type { ReactionTypeEmoji, Update } from 'grammy/types'
@@ -44,15 +48,26 @@ if (!TOKEN) {
   process.exit(1)
 }
 try { chmodSync(ENV_FILE, 0o600) } catch {}
+// Logs, heartbeat, queue and downloaded attachments are private to the owner.
+process.umask(0o077)
 
 const API_ROOT = process.env.TELEGRAM_API_ROOT ?? 'https://api.telegram.org'
-for (const d of [GW_DIR, QUEUE_DIR, DONE_DIR, INBOX_DIR]) mkdirSync(d, { recursive: true, mode: 0o700 })
+for (const d of [BOT_DIR, GW_DIR, QUEUE_DIR, DONE_DIR, INBOX_DIR]) {
+  mkdirSync(d, { recursive: true, mode: 0o700 })
+  try { chmodSync(d, 0o700) } catch {}
+}
+
+/** Download URLs carry the token; keep it out of logs and socket errors. */
+const redact = (s: string) => s.replaceAll(TOKEN!, '<token>')
 
 function log(msg: string): void {
-  const line = `${new Date().toISOString()} ${msg}\n`
+  const line = `${new Date().toISOString()} ${redact(msg)}\n`
   try { appendFileSync(LOG_FILE, line) } catch {}
   process.stderr.write(line)
 }
+
+/** Disk trouble: the update is not acknowledged, so Telegram sends it again. */
+class DiskError extends Error {}
 
 process.on('unhandledRejection', err => log(`unhandled rejection: ${err}`))
 process.on('uncaughtException', err => log(`uncaught exception: ${err}`))
@@ -97,6 +112,9 @@ function loadAccess(): Access {
     }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return defaultAccess()
+    // Only bad JSON is moved aside. A read error (permissions, I/O) must not
+    // wipe the allowlist, so it is retried instead.
+    if (!(err instanceof SyntaxError)) throw new DiskError(`cannot read access.json: ${err}`)
     try { renameSync(ACCESS_FILE, `${ACCESS_FILE}.corrupt-${Date.now()}`) } catch {}
     log('access.json is corrupt, moved aside; starting with an empty allowlist')
     return defaultAccess()
@@ -120,14 +138,18 @@ function pruneExpired(a: Access): boolean {
 
 function assertAllowedChat(chat_id: string): void {
   const access = loadAccess()
-  if (access.allowFrom.includes(chat_id) || chat_id in access.groups) return
+  if (access.allowFrom.includes(chat_id) || Object.hasOwn(access.groups, chat_id)) return
   throw new Error(`chat ${chat_id} is not allowlisted`)
 }
 
 // The bot's own state (token, access list) must never be sent as a file.
+// macOS volumes are usually case-insensitive, so compare paths that way there.
 function assertSendable(f: string): void {
+  const fold = (p: string) => process.platform === 'darwin' ? p.toLowerCase() : p
   let real: string, stateReal: string
-  try { real = realpathSync(f); stateReal = realpathSync(BOT_DIR) } catch { return }
+  try { real = fold(realpathSync.native(f)); stateReal = fold(realpathSync.native(BOT_DIR)) } catch (err) {
+    throw new Error(`cannot check file ${f}: ${err instanceof Error ? err.message : err}`)
+  }
   const inbox = join(stateReal, 'inbox')
   if (real.startsWith(stateReal + sep) && !real.startsWith(inbox + sep)) {
     throw new Error(`refusing to send channel state: ${f}`)
@@ -138,7 +160,9 @@ type GateResult = { action: 'deliver'; access: Access } | { action: 'drop' } | {
 
 function gate(ctx: Context): GateResult {
   const access = loadAccess()
-  if (pruneExpired(access)) saveAccess(access)
+  if (pruneExpired(access)) {
+    try { saveAccess(access) } catch (err) { log(`could not prune expired pairings: ${err}`) }
+  }
   if (access.dmPolicy === 'disabled' || !ctx.from) return { action: 'drop' }
   const senderId = String(ctx.from.id)
   const chatType = ctx.chat?.type
@@ -197,21 +221,21 @@ function isMentioned(ctx: Context, extraPatterns?: string[]): boolean {
   return false
 }
 
+const approving = new Set<string>()
+
 function checkApprovals(): void {
   let files: string[]
   try { files = readdirSync(APPROVED_DIR) } catch { return }
   for (const senderId of files) {
+    if (approving.has(senderId)) continue
+    approving.add(senderId)
     const file = join(APPROVED_DIR, senderId)
-    void bot.api.sendMessage(senderId, `Paired! Say hi to ${EA_NAME}.`).then(
-      () => rmSync(file, { force: true }),
-      err => { log(`approval confirm failed: ${err}`); rmSync(file, { force: true }) },
-    )
+    void bot.api.sendMessage(senderId, `Paired! Say hi to ${EA_NAME}.`).catch(err => log(`approval confirm failed: ${err}`))
+      .finally(() => { rmSync(file, { force: true }); approving.delete(senderId) })
   }
 }
 
 // ----------------------------------------------------------------- queue --
-
-class QueueWriteError extends Error {}
 
 function queuePath(id: number): string { return join(QUEUE_DIR, `${id}.json`) }
 
@@ -221,7 +245,7 @@ function enqueue(item: QueueItem): void {
     writeFileSync(tmp, JSON.stringify(item, null, 2) + '\n', { mode: 0o600 })
     renameSync(tmp, queuePath(item.update_id))
   } catch (err) {
-    throw new QueueWriteError(`cannot write queue file for update ${item.update_id}: ${err}`)
+    throw new DiskError(`cannot write queue file for update ${item.update_id}: ${err}`)
   }
 }
 
@@ -238,6 +262,19 @@ function markDone(id: number): void {
   try { renameSync(queuePath(id), join(DONE_DIR, `${id}.json`)) } catch {}
 }
 
+// An ack only proves the channel process wrote the event; the session may
+// still have dropped it (started without channels enabled, say). So an acked
+// message stays queued, marked delivered, until the session sends something
+// to that chat. If it never does, the next session gets it again.
+function markDelivered(id: number): void {
+  try {
+    const item = JSON.parse(readFileSync(queuePath(id), 'utf8')) as QueueItem
+    if (!item.delivered_at) enqueue({ ...item, delivered_at: new Date().toISOString() })
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') log(`cannot mark update ${id} delivered: ${err}`)
+  }
+}
+
 function pruneDone(): void {
   for (const f of readdirSync(DONE_DIR)) {
     const p = join(DONE_DIR, f)
@@ -250,7 +287,13 @@ function pruneDone(): void {
 // role "channel". Only channels are given inbound messages. Anything else on
 // the socket (bin/tg-status, a headless run) may send but never receives.
 
-type Client = { sock: Socket; role: 'channel' | 'tool'; label: string; inflight: Set<number> }
+type Client = {
+  sock: Socket; role: 'channel' | 'tool'; label: string; inflight: Set<number>
+  /** update_id -> when this client acked it. */
+  acked: Map<number, number>
+  /** When this client's previous reply/react/edit started. */
+  lastCall: number
+}
 const clients = new Set<Client>()
 const channels = (): Client[] => [...clients].filter(c => c.role === 'channel')
 
@@ -266,14 +309,36 @@ function push(c: Client, msg: Reply): void {
   try { c.sock.write(JSON.stringify(msg) + '\n') } catch {}
 }
 
-/** Hand every queued message to the first connected channel, oldest first. */
+/** Is the sender of a queued message still allowed in? Access may have changed since it was queued. */
+function stillAllowed(a: Access, meta: Record<string, string>): boolean {
+  if (a.dmPolicy === 'disabled') return false
+  if (meta.chat_id !== meta.user_id) {
+    if (!Object.hasOwn(a.groups, meta.chat_id)) return false
+    const allow = a.groups[meta.chat_id].allowFrom ?? []
+    return allow.length === 0 || allow.includes(meta.user_id)
+  }
+  return a.allowFrom.includes(meta.user_id)
+}
+
+/**
+ * Hand every queued message to the newest connected channel, oldest message
+ * first. The newest, because an older session that stopped reading would
+ * otherwise keep swallowing everything.
+ */
 function dispatch(): void {
-  const primary = channels()[0]
+  const primary = channels().at(-1)
   if (!primary) return
+  let access: Access
+  try { access = loadAccess() } catch (err) { log(`dispatch postponed: ${err}`); return }
   for (const item of queued()) {
     if (primary.inflight.has(item.update_id)) continue
+    if (!stillAllowed(access, item.meta)) {
+      log(`dropped queued update ${item.update_id}: sender ${item.meta.user_id} is no longer allowed`)
+      markDone(item.update_id)
+      continue
+    }
     primary.inflight.add(item.update_id)
-    push(primary, { event: 'message', item })
+    push(primary, { event: 'message', item: item.delivered_at ? { ...item, meta: { ...item.meta, redelivered: 'true' } } : item })
   }
 }
 
@@ -324,7 +389,7 @@ function tick(): void {
   }
 
   if (noChannel && !unclaimedNotified && !downNotified) {
-    const oldest = queued()[0]
+    const oldest = queued().find(i => !i.delivered_at)
     if (oldest && now - Date.parse(oldest.received_at) >= UNCLAIMED_NOTICE_MS) {
       unclaimedNotified = true
       log('notice: message unclaimed')
@@ -366,6 +431,7 @@ function writeHeartbeat(): void {
 
 const MAX_CHUNK_LIMIT = 4096
 const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
+const MAX_PHOTO_BYTES = 10 * 1024 * 1024
 const PHOTO_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp'])
 
 function chunk(text: string, limit: number, mode: 'length' | 'newline'): string[] {
@@ -380,6 +446,9 @@ function chunk(text: string, limit: number, mode: 'length' | 'newline'): string[
       const space = rest.lastIndexOf(' ', limit)
       cut = para > limit / 2 ? para : line > limit / 2 ? line : space > 0 ? space : limit
     }
+    // Never split an emoji (or any surrogate pair) across two messages.
+    const c = rest.charCodeAt(cut - 1)
+    if (cut > 1 && c >= 0xd800 && c <= 0xdbff) cut--
     out.push(rest.slice(0, cut))
     rest = rest.slice(cut).replace(/^\n+/, '')
   }
@@ -391,7 +460,9 @@ async function opSend(a: Record<string, unknown>): Promise<string> {
   const chat_id = String(a.chat_id)
   const text = String(a.text ?? '')
   const reply_to = a.reply_to != null ? Number(a.reply_to) : undefined
-  const files = (a.files as string[] | undefined) ?? []
+  const files = a.files ?? []
+  if (!Array.isArray(files) || !files.every(f => typeof f === 'string')) throw new Error('files must be an array of paths')
+  if (!text && !files.length) throw new Error('nothing to send: text and files are both empty')
   const parseMode = a.format === 'markdownv2' ? ('MarkdownV2' as const) : undefined
   assertAllowedChat(chat_id)
   for (const f of files) {
@@ -402,7 +473,7 @@ async function opSend(a: Record<string, unknown>): Promise<string> {
   const access = loadAccess()
   const limit = Math.max(1, Math.min(access.textChunkLimit ?? MAX_CHUNK_LIMIT, MAX_CHUNK_LIMIT))
   const replyMode = access.replyToMode ?? 'first'
-  const chunks = chunk(text, limit, access.chunkMode ?? 'length')
+  const chunks = text ? chunk(text, limit, access.chunkMode ?? 'length') : []
   const sentIds: number[] = []
   try {
     for (let i = 0; i < chunks.length; i++) {
@@ -418,7 +489,8 @@ async function opSend(a: Record<string, unknown>): Promise<string> {
   }
   for (const f of files) {
     const opts = reply_to != null && replyMode !== 'off' ? { reply_parameters: { message_id: reply_to } } : undefined
-    const sent = PHOTO_EXTS.has(extname(f).toLowerCase())
+    // Telegram caps photos at 10MB; a bigger image still goes, as a document.
+    const sent = PHOTO_EXTS.has(extname(f).toLowerCase()) && statSync(f).size <= MAX_PHOTO_BYTES
       ? await bot.api.sendPhoto(chat_id, new InputFile(f), opts)
       : await bot.api.sendDocument(chat_id, new InputFile(f), opts)
     sentIds.push(sent.message_id)
@@ -426,10 +498,14 @@ async function opSend(a: Record<string, unknown>): Promise<string> {
   return sentIds.length === 1 ? `sent (id: ${sentIds[0]})` : `sent ${sentIds.length} parts (ids: ${sentIds.join(', ')})`
 }
 
+const DOWNLOAD_TIMEOUT_MS = 120_000
+
 async function downloadFile(file_id: string): Promise<string> {
-  const file = await bot.api.getFile(file_id)
+  // A stalled download would otherwise hold up the poll loop for good.
+  const signal = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)
+  const file = await bot.api.getFile(file_id, signal)
   if (!file.file_path) throw new Error('Telegram returned no file_path, the file may have expired')
-  const res = await fetch(`${API_ROOT}/file/bot${TOKEN}/${file.file_path}`)
+  const res = await fetch(`${API_ROOT}/file/bot${TOKEN}/${file.file_path}`, { signal })
   if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`)
   const rawExt = file.file_path.includes('.') ? file.file_path.split('.').pop()! : 'bin'
   const ext = rawExt.replace(/[^a-zA-Z0-9]/g, '') || 'bin'
@@ -441,6 +517,7 @@ async function downloadFile(file_id: string): Promise<string> {
 
 async function handleRequest(c: Client, req: Request): Promise<unknown> {
   const a = req as Record<string, unknown>
+  const started = Date.now()
   switch (req.op) {
     case 'hello':
       c.role = a.role === 'channel' ? 'channel' : 'tool'
@@ -450,24 +527,24 @@ async function handleRequest(c: Client, req: Request): Promise<unknown> {
     case 'status':
       return status()
     case 'ack':
-      c.inflight.delete(Number(a.update_id))
-      markDone(Number(a.update_id))
+      markDelivered(Number(a.update_id))
+      c.acked.set(Number(a.update_id), Date.now())
       if (!deliveredUnanswered) deliveredUnanswered = new Date()
       return 'ok'
-    case 'send': return answered(await opSend(a))
+    case 'send': return answered(c, started, String(a.chat_id), await opSend(a), a.reply_to != null ? Number(a.reply_to) : undefined)
     case 'react':
       assertAllowedChat(String(a.chat_id))
       await bot.api.setMessageReaction(String(a.chat_id), Number(a.message_id), [
         { type: 'emoji', emoji: a.emoji as ReactionTypeEmoji['emoji'] },
       ])
-      return answered('reacted')
+      return answered(c, started, String(a.chat_id), 'reacted', Number(a.message_id))
     case 'edit': {
       assertAllowedChat(String(a.chat_id))
       const edited = await bot.api.editMessageText(
         String(a.chat_id), Number(a.message_id), String(a.text),
         ...(a.format === 'markdownv2' ? [{ parse_mode: 'MarkdownV2' as const }] : []),
       )
-      return answered(`edited (id: ${typeof edited === 'object' ? edited.message_id : a.message_id})`)
+      return answered(c, started, String(a.chat_id), `edited (id: ${typeof edited === 'object' ? edited.message_id : a.message_id})`)
     }
     case 'download':
       return await downloadFile(String(a.file_id))
@@ -476,10 +553,29 @@ async function handleRequest(c: Client, req: Request): Promise<unknown> {
   }
 }
 
-/** Any outbound message proves the session is alive and answering. */
-function answered<T>(result: T): T {
+/**
+ * Any outbound message proves the session is alive. A message it was handed
+ * leaves the queue only once this session has clearly seen it: it replied to
+ * or reacted on that message (or a later one), or it was acked before this
+ * session's previous call began. Anything newer stays queued, so a crash
+ * mid-task redelivers it. Tool clients (bin/tg-status) never clear anything.
+ */
+function answered<T>(c: Client, started: number, chat_id: string, result: T, target?: number): T {
   deliveredUnanswered = null
   stallNotified = false
+  if (c.role !== 'channel') return result
+  const seenBefore = c.lastCall
+  c.lastCall = started
+  try {
+    for (const item of queued()) {
+      const at = c.acked.get(item.update_id)
+      if (at == null || item.meta.chat_id !== chat_id) continue
+      if (at < seenBefore || (target != null && Number(item.meta.message_id) <= target)) {
+        markDone(item.update_id)
+        c.acked.delete(item.update_id)
+      }
+    }
+  } catch (err) { log(`cannot clear answered messages: ${err}`) }
   return result
 }
 
@@ -487,20 +583,22 @@ function answered<T>(result: T): T {
 
 function serve(): void {
   const server = createServer(sock => {
-    const c: Client = { sock, role: 'tool', label: 'unnamed', inflight: new Set() }
+    const c: Client = { sock, role: 'tool', label: 'unnamed', inflight: new Set(), acked: new Map(), lastCall: 0 }
     clients.add(c)
     let buf = ''
-    sock.on('data', d => {
-      buf += d.toString()
+    sock.setEncoding('utf8')
+    sock.on('data', (d: string) => {
+      buf += d
       let nl: number
       while ((nl = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, nl); buf = buf.slice(nl + 1)
         if (!line.trim()) continue
         let req: Request
         try { req = JSON.parse(line) } catch { continue }
+        if (!req || typeof req !== 'object') continue
         handleRequest(c, req).then(
           result => push(c, { id: req.id, ok: true, result }),
-          err => push(c, { id: req.id, ok: false, error: err instanceof Error ? err.message : String(err) }),
+          err => push(c, { id: req.id, ok: false, error: redact(err instanceof Error ? err.message : String(err)) }),
         )
       }
     })
@@ -568,6 +666,7 @@ async function handleInbound(ctx: Context, text: string, photoFileId?: string, a
       user_id: String(from.id),
       ts: new Date((ctx.message?.date ?? 0) * 1000).toISOString(),
       ...(imagePath ? { image_path: imagePath } : {}),
+      ...(photoFileId && !imagePath ? { attachment_kind: 'photo', attachment_file_id: photoFileId } : {}),
       ...(attachment ? {
         attachment_kind: attachment.kind,
         attachment_file_id: attachment.file_id,
@@ -679,7 +778,7 @@ async function poll(): Promise<void> {
         await bot.handleUpdate(u)
       } catch (err) {
         const cause = (err as { error?: unknown }).error ?? err
-        if (cause instanceof QueueWriteError) {
+        if (cause instanceof DiskError) {
           log(`${cause.message}; not acknowledging, will ask Telegram again`)
           await new Promise(r => setTimeout(r, 5000))
           break
@@ -687,7 +786,7 @@ async function poll(): Promise<void> {
         log(`handler error on update ${u.update_id} (skipped): ${cause}`)
       }
       offset = u.update_id + 1
-      saveOffset(offset)
+      try { saveOffset(offset) } catch (err) { log(`cannot save offset ${offset}: ${err}`) }
     }
   }
 }

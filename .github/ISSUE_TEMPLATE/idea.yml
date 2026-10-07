@@ -1,0 +1,16 @@
+name: Something is missing
+description: A gap in the guide, a trap you hit, or a change you want to propose before writing it.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you were trying to do
+      description: The situation, not the solution. What did the guide not cover?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: Optional. If you plan to send a pull request, say so here first.

@@ -5,11 +5,15 @@
  * process pointed (TELEGRAM_API_ROOT) at a fake Telegram served on
  * localhost, with its queue and bot state in a temp folder, and thresholds
  * shortened to a second or two. Run with `bun test` in this folder.
+ *
+ * Derived from the telegram plugin in anthropics/claude-plugins-official
+ * (commit 1e96c6b), licensed Apache-2.0, and modified. See README.md.
+ * SPDX-License-Identifier: Apache-2.0
  */
 import { afterEach, describe, expect, test } from 'bun:test'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs'
 import { connect, type Socket } from 'net'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -50,7 +54,11 @@ function fakeTelegram() {
         }
         case 'sendMessage':
           return ok({ message_id: nextMessage++, date: 0, chat: { id: body.chat_id, type: 'private' }, text: body.text })
+        case 'sendPhoto':
+        case 'sendDocument':
+          return ok({ message_id: nextMessage++, date: 0, chat: { id: OWNER, type: 'private' } })
         case 'getFile':
+          if (body.file_id === 'GONE') return Response.json({ ok: false, error_code: 400, description: 'Bad Request: file is gone' }, { status: 400 })
           return ok({ file_id: body.file_id, file_unique_id: 'uniq', file_path: 'voice/file_1.oga' })
         default:
           return ok(true)
@@ -74,7 +82,7 @@ function fakeTelegram() {
           date: Math.floor(Date.now() / 1000),
           chat: { id: from, type: 'private' },
           from: { id: from, is_bot: false, first_name: 'T', username: from === OWNER ? 'owner' : 'stranger' },
-          ...(extra.voice ? {} : { text }),
+          ...(extra.voice || extra.photo ? {} : { text }),
           ...extra,
         },
       })
@@ -94,8 +102,9 @@ function sessionClient(sockPath: string, role: 'channel' | 'tool' = 'channel') {
     sock = connect(sockPath)
     sock.on('connect', resolve)
     sock.on('error', reject)
-    sock.on('data', d => {
-      buf += d.toString()
+    sock.setEncoding('utf8')
+    sock.on('data', (d: string) => {
+      buf += d
       let nl: number
       while ((nl = buf.indexOf('\n')) >= 0) {
         const msg = JSON.parse(buf.slice(0, nl)); buf = buf.slice(nl + 1)
@@ -112,6 +121,8 @@ function sessionClient(sockPath: string, role: 'channel' | 'tool' = 'channel') {
   return {
     events,
     request,
+    replies,
+    write: (b: Buffer) => sock.write(b),
     hello: async () => { await ready; return request('hello', { role, label: 'test' }) },
     close: () => sock.destroy(),
   }
@@ -169,7 +180,7 @@ async function rig(env: Record<string, string> = {}) {
 }
 
 describe('queue', () => {
-  test('a message with no session is saved to disk, then delivered and removed on ack', async () => {
+  test('a message with no session is saved to disk, delivered, and removed once its chat is answered', async () => {
     const r = await rig()
     const id = r.tg.inbound('hello Tanya')
     await until(() => r.queue().length === 1, 8000, 'queue file')
@@ -184,9 +195,77 @@ describe('queue', () => {
     expect(r.queue().length).toBe(1) // still held until acknowledged
 
     await s.request('ack', { update_id: id })
+    expect(r.queue().length).toBe(1) // acked, but the session may still have dropped it
+    await s.request('send', { chat_id: String(OWNER), text: 'working on it' })
+    expect(r.queue().length).toBe(1) // acked while that call was being written: maybe not seen yet
+    await s.request('send', { chat_id: String(OWNER), text: 'done' })
     expect(r.queue().length).toBe(0)
     expect(r.done()).toEqual([`${id}.json`])
     s.close()
+  })
+
+  test('answering A leaves B, delivered alongside it, queued; the CLI clears nothing', async () => {
+    const r = await rig()
+    const s = sessionClient(r.sock)
+    await s.hello()
+    const a = r.tg.inbound('A')
+    const b = r.tg.inbound('B')
+    await until(() => s.events.length === 2)
+    await s.request('ack', { update_id: a })
+    await s.request('ack', { update_id: b })
+
+    const cli = sessionClient(r.sock, 'tool')
+    await cli.hello()
+    await cli.request('send', { chat_id: String(OWNER), text: 'from the terminal' })
+    await cli.request('send', { chat_id: String(OWNER), text: 'again' })
+    expect(r.queue().length).toBe(2)
+
+    await s.request('send', { chat_id: String(OWNER), text: 'about A', reply_to: s.events[0].meta.message_id })
+    expect(r.queue()).toEqual([`${b}.json`])
+    s.close(); cli.close()
+
+    const next = sessionClient(r.sock)
+    await next.hello()
+    await until(() => next.events.length === 1, 8000, 'B redelivered')
+    expect(next.events[0].update_id).toBe(b)
+    expect(next.events[0].meta.redelivered).toBe('true')
+    next.close()
+  })
+
+  test('a queued group message is dropped once the group is removed, even from a DM-allowed sender', async () => {
+    const r = await rig()
+    const group = { requireMention: false, allowFrom: [] }
+    writeFileSync(join(r.botDir, 'access.json'), JSON.stringify({ dmPolicy: 'allowlist', allowFrom: [String(OWNER)], groups: { '-5': group }, pending: {} }))
+    const id = r.tg.inbound('in the group', OWNER, { chat: { id: -5, type: 'group' } })
+    await until(() => r.queue().length === 1)
+    writeFileSync(join(r.botDir, 'access.json'), JSON.stringify({ dmPolicy: 'allowlist', allowFrom: [String(OWNER)], groups: {}, pending: {} }))
+    const s = sessionClient(r.sock)
+    await s.hello()
+    await Bun.sleep(300)
+    expect(s.events).toEqual([])
+    expect(r.done()).toEqual([`${id}.json`])
+    s.close()
+  })
+
+  test('a message acked but never answered goes to the next session, marked as redelivered', async () => {
+    const r = await rig()
+    const a = sessionClient(r.sock)
+    await a.hello()
+    const id = r.tg.inbound('did you see this')
+    await until(() => a.events.length === 1)
+    await a.request('ack', { update_id: id })
+    expect(a.events[0].meta.redelivered).toBeUndefined()
+    a.close()
+
+    const b = sessionClient(r.sock)
+    await b.hello()
+    await until(() => b.events.length === 1, 8000, 'redelivery')
+    expect(b.events[0].update_id).toBe(id)
+    expect(b.events[0].meta.redelivered).toBe('true')
+    await b.request('ack', { update_id: id })
+    await b.request('react', { chat_id: String(OWNER), message_id: b.events[0].meta.message_id, emoji: '\u{1F440}' })
+    expect(r.queue()).toEqual([])
+    b.close()
   })
 
   test('a message from someone not on the allowlist is dropped', async () => {
@@ -250,8 +329,48 @@ describe('queue', () => {
     const meta = s.events[0].meta
     expect(meta.attachment_kind).toBe('voice')
     expect(readFileSync(meta.attachment_path, 'utf8')).toBe('voice-bytes')
+    expect(statSync(meta.attachment_path).mode & 0o777).toBe(0o600)
     for (const k of Object.keys(meta)) expect(k).toMatch(/^[a-z_]+$/)
     s.close()
+  })
+
+  test('a photo that fails to download keeps its file_id for a retry', async () => {
+    const r = await rig()
+    r.tg.inbound('', OWNER, { caption: 'look', photo: [{ file_id: 'GONE', file_unique_id: 'g', width: 1, height: 1 }] })
+    const s = sessionClient(r.sock)
+    await s.hello()
+    await until(() => s.events.length === 1)
+    const meta = s.events[0].meta
+    expect(meta.image_path).toBeUndefined()
+    expect(meta.attachment_kind).toBe('photo')
+    expect(meta.attachment_file_id).toBe('GONE')
+    s.close()
+  })
+
+  test('a queued message from someone removed from the allowlist is not handed over', async () => {
+    const r = await rig()
+    const id = r.tg.inbound('sent before removal')
+    await until(() => r.queue().length === 1)
+    writeFileSync(join(r.botDir, 'access.json'), JSON.stringify({ dmPolicy: 'allowlist', allowFrom: [], groups: {}, pending: {} }))
+    const s = sessionClient(r.sock)
+    await s.hello()
+    await Bun.sleep(300)
+    expect(s.events).toEqual([])
+    expect(r.queue()).toEqual([])
+    expect(r.done()).toEqual([`${id}.json`])
+    s.close()
+  })
+
+  test('with two sessions connected, the newest one gets the messages', async () => {
+    const r = await rig()
+    const old = sessionClient(r.sock)
+    await old.hello()
+    const fresh = sessionClient(r.sock)
+    await fresh.hello()
+    r.tg.inbound('for the new one')
+    await until(() => fresh.events.length === 1)
+    expect(old.events).toEqual([])
+    old.close(); fresh.close()
   })
 })
 
@@ -278,6 +397,71 @@ describe('sending', () => {
     const bad = await s.request('send', { chat_id: String(OWNER), text: 'x', files: [join(r.botDir, 'access.json')] })
     expect(bad.ok).toBe(false)
     expect(bad.error).toContain('refusing to send channel state')
+    s.close()
+  })
+
+  test('the state folder is refused under any letter case on macOS, and a missing file fails closed', async () => {
+    const r = await rig()
+    const s = sessionClient(r.sock)
+    await s.hello()
+    const upper = join(r.botDir, '..', 'BOT', '.env')
+    const bad = await s.request('send', { chat_id: String(OWNER), text: 'x', files: [upper] })
+    expect(bad.ok).toBe(false)
+    if (process.platform === 'darwin') expect(bad.error).toContain('refusing to send channel state')
+    const missing = await s.request('send', { chat_id: String(OWNER), text: 'x', files: [join(r.gwDir, 'nope.txt')] })
+    expect(missing.ok).toBe(false)
+    expect(r.tg.sent()).toEqual([])
+    s.close()
+  })
+
+  test('a reply with only a file and no text sends the file', async () => {
+    const r = await rig()
+    const s = sessionClient(r.sock)
+    await s.hello()
+    const f = join(r.gwDir, 'report.txt')
+    writeFileSync(f, 'contents')
+    const res = await s.request('send', { chat_id: String(OWNER), files: [f] })
+    expect(res.ok).toBe(true)
+    expect(r.tg.calls.map(c => c.method)).toContain('sendDocument')
+    expect(r.tg.sent()).toEqual([])
+    const empty = await s.request('send', { chat_id: String(OWNER), text: '' })
+    expect(empty.ok).toBe(false)
+    const notArray = await s.request('send', { chat_id: String(OWNER), text: 'x', files: f })
+    expect(notArray.ok).toBe(false)
+
+    const big = join(r.gwDir, 'big.png')
+    writeFileSync(big, Buffer.alloc(11 * 1024 * 1024))
+    expect((await s.request('send', { chat_id: String(OWNER), text: '', files: [big] })).ok).toBe(true)
+    expect(r.tg.calls.map(c => c.method).filter(m => m === 'sendDocument').length).toBe(2)
+    expect(r.tg.calls.some(c => c.method === 'sendPhoto')).toBe(false)
+    s.close()
+  })
+
+  test('long replies are split without breaking an emoji in two', async () => {
+    const r = await rig()
+    writeFileSync(join(r.botDir, 'access.json'), JSON.stringify({ dmPolicy: 'allowlist', allowFrom: [String(OWNER)], groups: {}, pending: {}, textChunkLimit: 5 }))
+    const s = sessionClient(r.sock)
+    await s.hello()
+    const res = await s.request('send', { chat_id: String(OWNER), text: 'abcd\u{1F600}efg' })
+    expect(res.ok).toBe(true)
+    expect(r.tg.sent()).toEqual(['abcd', '\u{1F600}efg'])
+    s.close()
+  })
+
+  test('a request split inside a multi-byte character arrives intact', async () => {
+    const r = await rig()
+    const s = sessionClient(r.sock)
+    await s.hello()
+    const text = 'caf\u00e9 \u{1F600} done'
+    const bytes = Buffer.from(JSON.stringify({ id: 99, op: 'send', chat_id: String(OWNER), text }) + '\n')
+    const mid = bytes.indexOf(Buffer.from('\u{1F600}')) + 2
+    s.write(bytes.subarray(0, mid))
+    await Bun.sleep(100)
+    s.write(bytes.subarray(mid))
+    await until(() => s.replies.has(99))
+    expect(r.tg.sent()).toEqual([text])
+    s.write(Buffer.from('null\n'))
+    expect((await s.request('status')).ok).toBe(true) // still serving
     s.close()
   })
 
@@ -425,7 +609,7 @@ describe('channel server (what Claude Code loads)', () => {
     expect(got[0].method).toBe('notifications/claude/channel')
     expect(got[0].params.content).toBe('sent while down')
     expect(got[0].params.meta.chat_id).toBe(String(OWNER))
-    await until(() => r.queue().length === 0, 8000, 'ack')
+    await until(() => JSON.parse(readFileSync(join(r.gwDir, 'queue', r.queue()[0]), 'utf8')).delivered_at, 8000, 'ack')
 
     r.tg.inbound('sent while up')
     await until(() => got.length === 2, 8000, 'live event')

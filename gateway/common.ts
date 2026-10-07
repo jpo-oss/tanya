@@ -8,6 +8,10 @@
  * Every path and threshold can be overridden by an environment variable so
  * the test suite can run a second gateway against a fake Telegram without
  * touching the real bot or the real queue.
+ *
+ * Derived from the telegram plugin in anthropics/claude-plugins-official
+ * (commit 1e96c6b), licensed Apache-2.0, and modified. See README.md.
+ * SPDX-License-Identifier: Apache-2.0
  */
 import { homedir } from 'os'
 import { join } from 'path'
@@ -67,8 +71,10 @@ export const SIGNATURE = process.env.TG_SIGNATURE ?? `- EA ${EA_NAME}`
 export function loadEnvFile(): void {
   try {
     for (const line of readFileSync(ENV_FILE, 'utf8').split('\n')) {
-      const m = line.match(/^(\w+)=(.*)$/)
-      if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2]
+      const m = line.trim().match(/^(\w+)=(.*)$/)
+      if (!m || process.env[m[1]] !== undefined) continue
+      const v = m[2].trim()
+      process.env[m[1]] = /^(['"]).*\1$/.test(v) ? v.slice(1, -1) : v
     }
   } catch {}
 }
@@ -79,6 +85,8 @@ export type QueueItem = {
   received_at: string
   content: string
   meta: Record<string, string>
+  /** Set once a session acknowledged it; it stays queued until that chat gets an answer. */
+  delivered_at?: string
 }
 
 /** Client → gateway. One JSON object per line. */

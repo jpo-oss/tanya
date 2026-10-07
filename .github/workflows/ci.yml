@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gateway:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gateway
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - run: bun install --frozen-lockfile
+      - run: env -u TELEGRAM_BOT_TOKEN bun test
+
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The system Python on macOS is 3.9, so the scripts must parse there.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.9"
+      - run: python -m py_compile bin/fellow-poll.py bin/fieldy-poll.py bin/tg-watchdog bin/build-single-file
+      - run: bash -n bin/nightly-ingest.sh templates/hooks/*.sh templates/vault/transcribe.sh
+      - run: shellcheck bin/nightly-ingest.sh templates/hooks/*.sh templates/vault/transcribe.sh
+      - run: for f in templates/hooks/*.json templates/manifests/*.json gateway/mcp.json; do python -m json.tool "$f" > /dev/null || exit 1; done
+      - name: Agent, command and skill frontmatter parses
+        run: |
+          for f in agents/developers/*.md commands/*.md skills/*/SKILL.md; do
+            ruby -ryaml -e 'YAML.safe_load(File.read(ARGV[0]).split(/^---\s*$/)[1]) or abort' "$f" || { echo "bad frontmatter: $f"; exit 1; }
+          done
+      - name: Guide builds into one file
+        run: python bin/build-single-file - > /dev/null
