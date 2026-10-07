@@ -5,6 +5,10 @@
  * one reply; the gateway may also push {event:'message'} lines at any time.
  * The client reconnects by itself, so a gateway restart (launchd kickstart,
  * a crash) heals without restarting the assistant session.
+ *
+ * Derived from the telegram plugin in anthropics/claude-plugins-official
+ * (commit 1e96c6b), licensed Apache-2.0, and modified. See README.md.
+ * SPDX-License-Identifier: Apache-2.0
  */
 import { connect, type Socket } from 'net'
 import { LAUNCHD_LABEL, SOCKET, type QueueItem, type Reply } from './common'
@@ -42,8 +46,9 @@ export class GatewayClient {
       this.log('connected to gateway')
       this.request('hello', { ...this.hello, pid: process.pid }).then(() => settle(true), () => settle(false))
     })
-    sock.on('data', d => {
-      this.buf += d.toString()
+    sock.setEncoding('utf8')
+    sock.on('data', (d: string) => {
+      this.buf += d
       let nl: number
       while ((nl = this.buf.indexOf('\n')) >= 0) {
         const line = this.buf.slice(0, nl)

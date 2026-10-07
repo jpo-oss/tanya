@@ -16,6 +16,10 @@
  *
  * Tool names and message attributes match the official telegram plugin
  * (Apache-2.0), which this replaces. Design: block G and step 13 of GUIDE.md.
+ *
+ * Derived from the telegram plugin in anthropics/claude-plugins-official
+ * (commit 1e96c6b), licensed Apache-2.0, and modified. See README.md.
+ * SPDX-License-Identifier: Apache-2.0
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -37,7 +41,7 @@ const mcp = new Server(
       '',
       `Messages from Telegram arrive as <channel source="${CHANNEL_NAME}" chat_id="..." message_id="..." user="..." ts="...">. If the tag has an image_path attribute, Read that file — it is a photo the sender attached. If the tag has attachment_path, the file is already on disk there (voice notes, documents, video). If it has attachment_file_id but no attachment_path, call download_attachment with that file_id, then Read the returned path. Reply with the reply tool — pass chat_id back. Use reply_to (set to a message_id) only when replying to an earlier message; omit it for normal responses.`,
       '',
-      'Messages are queued by a gateway that runs outside this session, so a batch with old ts values right after start is the backlog from while the session was down: read all of it before answering, and answer once.',
+      'Messages are queued by a gateway that runs outside this session, so a batch with old ts values right after start is the backlog from while the session was down: read all of it before answering, and answer once. A message with redelivered="true" was handed to an earlier session that never answered that chat; it may or may not have been acted on, so check before doing anything twice. A message stays queued until you reply to or react on it (or a later message), or make another reply after it arrived.',
       '',
       'reply accepts file paths (files: ["/abs/path.png"]) for attachments. Use react to add emoji reactions, and edit_message for interim progress updates. Edits don\'t trigger push notifications — when a long task completes, send a new reply so the user\'s device pings. If the gateway has heard nothing from this session for 10 minutes after handing over a message, it tells the sender the session may be stuck; a short interim reply on long tasks prevents that.',
       '',
@@ -48,12 +52,20 @@ const mcp = new Server(
   },
 )
 
+// Updates already shown to the session. After a reconnect the gateway may
+// hand over one whose ack was lost; it is acknowledged again, not shown twice.
+const seen = new Set<number>()
+
 async function deliver(item: QueueItem): Promise<void> {
   try {
-    await mcp.notification({
-      method: 'notifications/claude/channel',
-      params: { content: item.content, meta: item.meta },
-    })
+    if (!seen.has(item.update_id)) {
+      await mcp.notification({
+        method: 'notifications/claude/channel',
+        params: { content: item.content, meta: item.meta },
+      })
+      seen.add(item.update_id)
+      if (seen.size > 1000) seen.delete(seen.values().next().value!)
+    }
     await gw.request('ack', { update_id: item.update_id })
   } catch (err) {
     // Not acknowledged, so the gateway still holds it and will hand it to
@@ -80,10 +92,10 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
           chat_id: { type: 'string' },
           text: { type: 'string' },
           reply_to: { type: 'string', description: 'Message ID to thread under. Use message_id from the inbound <channel> block.' },
-          files: { type: 'array', items: { type: 'string' }, description: 'Absolute file paths to attach. Images send as photos; other types as documents. Max 50MB each.' },
+          files: { type: 'array', items: { type: 'string' }, description: 'Absolute file paths to attach. Images send as photos; other types as documents. Max 50MB each. text may be empty when files are given.' },
           format: { type: 'string', enum: ['text', 'markdownv2'], description: "Rendering mode. 'markdownv2' enables Telegram formatting; special characters must be escaped per MarkdownV2 rules. Default: 'text'." },
         },
-        required: ['chat_id', 'text'],
+        required: ['chat_id'],
       },
     },
     {
