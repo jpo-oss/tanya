@@ -1,0 +1,25 @@
+GUIDE.md
+  s_95f900475713a6::t_435374046ed47a 1947-1948,2005-2006,2013-2014
+bin/fellow-poll.py
+  s_95f900475713a6::t_783ce9b567bf00 1-251
+bin/fieldy-poll.py
+  s_95f900475713a6::t_38239587cee9ef 1-353
+bin/nightly-ingest.sh
+  s_95f900475713a6::t_ae8fc9e397a2dc 1-56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4542929be13ae78a3bc19a380f8b5ec5e3de98ea",
+  "prompts": {},
+  "sessions": {
+    "s_95f900475713a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ea9c1f18-633a-4ca9-89dd-54143b724c47",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Ryan Buswell <rbuswell93@gmail.com>"
+    }
+  }
+}
