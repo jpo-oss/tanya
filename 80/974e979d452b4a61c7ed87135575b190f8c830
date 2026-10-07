@@ -1,0 +1,21 @@
+bin/build-single-file
+  s_95f900475713a6::t_ff98ef8090b401 1-78
+.gitignore
+  s_95f900475713a6::t_af48ccd9270a85 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "80974e979d452b4a61c7ed87135575b190f8c830",
+  "prompts": {},
+  "sessions": {
+    "s_95f900475713a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ea9c1f18-633a-4ca9-89dd-54143b724c47",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Ryan Buswell <rbuswell93@gmail.com>"
+    }
+  }
+}
