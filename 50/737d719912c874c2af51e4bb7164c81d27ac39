@@ -1,0 +1,21 @@
+.gitignore
+  s_95f900475713a6::t_9ec2a1f5f3d9db 1-4
+CONTRIBUTING.md
+  s_95f900475713a6::t_15515a471776ce 1-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "50737d719912c874c2af51e4bb7164c81d27ac39",
+  "prompts": {},
+  "sessions": {
+    "s_95f900475713a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ea9c1f18-633a-4ca9-89dd-54143b724c47",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Ryan Buswell <rbuswell93@gmail.com>"
+    }
+  }
+}
