@@ -1,0 +1,39 @@
+GUIDE.md
+  s_95f900475713a6::t_0de957ec5e207a 1873,1875-1876,1878-1879,1881-1882,1884-1885,1887-1888,1890-1891,1893-1894,1896-1897,1899-1900,1904-1905
+agents/developers/android-dev.md
+  s_95f900475713a6::t_a457edb4c06fee 1-34
+agents/developers/azure-architect.md
+  s_95f900475713a6::t_59669328595738 1-37
+agents/developers/backend-dev.md
+  s_95f900475713a6::t_6992ed874183ab 1-34
+agents/developers/devops-cicd.md
+  s_95f900475713a6::t_abcd7e607895d9 1-36
+agents/developers/ios-dev.md
+  s_95f900475713a6::t_61db807a0d8134 1-34
+agents/developers/qa.md
+  s_95f900475713a6::t_5662b542dd2074 1-37
+agents/developers/security.md
+  s_95f900475713a6::t_2ea370d0987b04 1-33
+agents/developers/ui-ux-designer.md
+  s_95f900475713a6::t_ea16044211c5e1 1-57
+agents/developers/web-frontend-dev.md
+  s_95f900475713a6::t_0d30023e48bd9c 1-38
+commands/run-dev-agents.md
+  s_95f900475713a6::t_c98d3ca38211f0 1-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b9507fa321c10955b760b4895479ea2876011993",
+  "prompts": {},
+  "sessions": {
+    "s_95f900475713a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ea9c1f18-633a-4ca9-89dd-54143b724c47",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Ryan Buswell <rbuswell93@gmail.com>"
+    }
+  }
+}
