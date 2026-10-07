@@ -1,77 +1,112 @@
-# Build your own EA
+# Tanya
 
 A recipe for a personal executive assistant that runs in
-[Claude Code](https://claude.com/claude-code) on your own Mac. It reads your
-mail, calendar and Telegram, files your ideas into Obsidian vaults, writes
-Jira tickets that both humans and agents can act on, dispatches a team of
-specialist coding agents, and survives its own context compaction. It is
-modelled on EA Tanya, the assistant Ryan Buswell runs at JustPressOne.
+[Claude Code](https://code.claude.com/docs) on your own Mac. You don't install
+Tanya. You hand the guide to a fresh Claude Code session, it interviews you,
+shows you a plan, and builds your own assistant, with your own name for it, once
+you say yes.
 
-The recipe is one Markdown guide plus the files it links to. You hand it to a
-fresh Claude Code session and answer the questions it asks. Claude interviews you in ten short
-blocks, reads the answers back, shows you a plan, and builds nothing until you
-say yes.
+Tanya is the name of the assistant Ryan Buswell runs at JustPressOne. The guide
+uses it as the worked example throughout; yours will have its own name.
 
-## Five-minute start
+## What it can do once built
 
-1. Install Claude Code and sign in.
-2. Clone this repository, or build the single-file version with
-   `bin/build-single-file` and copy `build/build-your-own-ea.md` to your home
-   folder.
-3. Open a terminal there, run `claude`, and say:
+- Keep a map of every business and life area you run, and route work to the
+  right project instead of doing it in the wrong place.
+- File ideas, meeting notes and documents into Obsidian vaults through skills
+  that each know one vault's folder layout and frontmatter.
+- Write Jira tickets that a person and a coding agent can both pick up, and
+  commits that explain why.
+- Hand larger builds to a team of nine specialist coding agents with a lead
+  that scopes first and waits for your approval.
+- Talk to you on Telegram, including voice notes transcribed on your machine.
+- Read your mail and calendar (read-only until you decide otherwise).
+- Remember what happened today across its own context compactions.
 
-   > Read `~/build-your-own-ea.md` and start.
+Every one of those is optional except the first two. The guide asks which you
+want before it builds anything.
 
-   From a clone, point it at `GUIDE.md` instead; the guide links every file.
+## Getting started
 
-4. Answer the interview. Expect about an hour for the first pass, then a
-   plan you approve block by block.
+You need a Mac, Claude Code signed in to a paid Claude plan or an API account,
+and about an hour.
 
-## What you get
+```bash
+git clone https://github.com/jpo-oss/tanya.git
+cd tanya
+claude
+```
 
-- A root assistant with a persona file, a registry of your ventures and
-  projects, and a day log that survives compaction.
-- Skills for parking ideas, ingesting material into vaults, reviewing vault
-  inboxes, writing structured Jira tickets and structured git commits.
-- Nine specialist developer agents (backend, web, iOS, Android, UI/UX, QA,
-  security, DevOps, Azure) and a `run-dev-agents` command that scopes work
-  first and dispatches them, with a UX-laws checklist the QA agent enforces.
-- Pollers for meeting transcripts (Fellow) and a wearable recorder (Fieldy),
-  a nightly vault intake, and a Telegram gateway so you can talk to the
-  assistant from your phone.
-- Hooks that keep the assistant off your `main` branches and re-inject
-  context after a compaction.
+Then say:
+
+> Read GUIDE.md and start.
+
+Claude interviews you in ten short blocks, reads each one back, and shows you a
+plan. It creates nothing until you approve it. If you only want the core (the
+assistant, its registry and one notes vault), say so at the start and the
+interview drops the blocks you skip.
+
+If you'd rather hand Claude a single file, run `bin/build-single-file`. It
+writes `build/tanya.md` with every linked file inlined. The Telegram gateway is
+code rather than a template, so it is not inlined; keep the clone if you want
+Telegram.
+
+## What it costs
+
+- Claude usage. The assistant's own session is small, but project sessions and
+  scheduled runs add up. [Block J](GUIDE.md#block-j-models-and-context) covers
+  the measured numbers and the settings that keep them down.
+- Optional services: Fellow's API needs its Enterprise plan, a Fieldy wearable
+  is hardware you buy, and Cubic code review has its own pricing.
+- About 1.6 GB of disk for the local transcription model.
+
+## Platform support
+
+| | Apple silicon Mac | Intel Mac | Linux |
+|---|---|---|---|
+| Interview, registry, vaults, skills, agents | yes | yes | yes |
+| Telegram gateway | yes | yes | runs, but the guide only ships launchd jobs |
+| Apple Mail and Calendar route | yes | yes | no |
+| Scheduled runs and pollers | yes (launchd) | yes (launchd) | cron, adapt by hand |
+
+Windows is not supported.
+
+## Before you connect a mailbox
+
+An assistant that reads your mail and also has a shell is exposed to prompt
+injection: anyone who can email you can try to give it instructions. The guide
+keeps mail read-only, locks Telegram to an allowlist and has each skill do one
+narrow job, but none of that makes the risk go away. Read
+[the security model](GUIDE.md#8-security-model) first.
 
 ## What is where
 
-| Folder | What it holds |
+| Path | What it holds |
 |---|---|
 | [`GUIDE.md`](GUIDE.md) | The interview, the build steps, the traps |
-| [`templates/`](templates/) | CLAUDE.md files, manifests, vault skeleton, hooks, launchd plists, briefs |
-| [`agents/developers/`](agents/developers/) | The nine specialist agents |
-| [`commands/`](commands/) | `run-dev-agents`, the project-lead command |
+| [`templates/`](templates/) | CLAUDE.md files, manifests, vault skeleton, hooks, launchd jobs, briefs |
+| [`agents/developers/`](agents/developers/) | The nine specialist coding agents |
+| [`commands/`](commands/) | `run-dev-agents`, the lead that dispatches them |
 | [`skills/`](skills/) | idea, vault-ingest, vault-review, ingest-recordings, jira-tickets, structured-git-commits, ux-laws |
-| [`bin/`](bin/) | Nightly intake, the Fellow and Fieldy pollers, gateway tools, `build-single-file` |
-| [`gateway/`](gateway/) | The Telegram gateway and its tests |
+| [`bin/`](bin/) | Nightly intake, the Fellow and Fieldy pollers, Telegram tools, `build-single-file` |
+| [`gateway/`](gateway/) | The Telegram daemon and its tests |
 
-## Status
+## Contributing
 
-The split and the scrub are done. Section 5 of the guide now lives as real
-files under `templates/`, `agents/`, `commands/`, `skills/`, `bin/` and
-`gateway/`, and every file was scrubbed of the author's paths, accounts and
-identifiers. Tanya, Silo 1 and Silo 2 remain as declared example names. The
-repository is private and awaiting the author's read-through before it goes
-public.
+Bug reports from people who followed the guide on a real machine are the most
+useful thing you can send. See [CONTRIBUTING.md](CONTRIBUTING.md), including
+the part about AI-assisted changes, and [SECURITY.md](SECURITY.md) for anything
+sensitive.
 
 ## Licence
 
-MIT. See [`LICENSE`](LICENSE). The exception is [`gateway/`](gateway/), which
-is forked from the official Telegram plugin for Claude Code and keeps that
-code's Apache-2.0 licence. Third-party skills the guide installs by
-command (for example `leonxlnx/taste-skill`, `blader/humanizer`, the Vercel
-`skills` CLI and Anthropic's official plugins) keep their own licences and
-are not copied here.
+MIT, see [`LICENSE`](LICENSE). The exception is [`gateway/`](gateway/), which
+is derived from Anthropic's official Telegram plugin for Claude Code and keeps
+its Apache-2.0 licence; see [`gateway/README.md`](gateway/README.md).
+Third-party skills the guide installs by command (for example
+`leonxlnx/taste-skill`, `blader/humanizer` and Anthropic's plugins) keep their
+own licences and are not copied here.
 
 ## Credit
 
-Built using vibes by Ryan Buswell and Claude.
+Written by Ryan Buswell with Claude Code, from the setup he runs every day.
