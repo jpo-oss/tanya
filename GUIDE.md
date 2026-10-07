@@ -718,8 +718,8 @@ channel. Nothing else in the alias touches Telegram, and no environment
 variable is needed:
 
 ```bash
-alias <name>='cd ~/<Name> && claude --add-dir "<vault parent path>" --mcp-config "$HOME/<Name>/gateway/mcp.json" --dangerously-load-development-channels server:<name>-telegram'
-alias <name>-resume='cd ~/<Name> && claude --resume --mcp-config "$HOME/<Name>/gateway/mcp.json" --dangerously-load-development-channels server:<name>-telegram'
+alias <name>='cd ~/<Name> && ASSISTANT_NAME=<Name> ASSISTANT_HOME="$HOME/<Name>" claude --model best --add-dir "<vault parent path>" --mcp-config "$HOME/<Name>/gateway/mcp.json" --dangerously-load-development-channels server:<name>-telegram'
+alias <name>-resume='cd ~/<Name> && ASSISTANT_NAME=<Name> ASSISTANT_HOME="$HOME/<Name>" claude --resume --model best --add-dir "<vault parent path>" --mcp-config "$HOME/<Name>/gateway/mcp.json" --dangerously-load-development-channels server:<name>-telegram'
 ```
 
 The flag name is alarming and the start screen says so every time. It means
@@ -907,7 +907,10 @@ Questions:
 
 The tiers:
 
-- The assistant's own loop runs on the newest top model, always. The rule behind
+- The assistant's own loop runs on the newest top model, always. The aliases
+  start it with `--model best`, which Claude Code resolves to its most capable
+  model (Fable where your plan has it, Opus otherwise), so it moves up on its
+  own when a new model ships. The rule behind
   it is minimal tokens in, maximum judgment out. The assistant's own context is
   small, so the expensive model is cheap there, and its job is entirely judgment.
 - Opus for research, report writing, PRD and spec drafting, and any review where
