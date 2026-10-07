@@ -1,0 +1,33 @@
+GUIDE.md
+  s_95f900475713a6::t_68ed4da5ca9fdb 1807-1808,1848-1849
+skills/idea/SKILL.md
+  s_95f900475713a6::t_7274bb81b6141f 1-61
+skills/ingest-recordings/SKILL.md
+  s_95f900475713a6::t_a0fedb717faa5f 1-123
+skills/jira-tickets/SKILL.md
+  s_95f900475713a6::t_f9c0122e7b437c 1-173
+skills/structured-git-commits/SKILL.md
+  s_95f900475713a6::t_7805ae806b1c27 1-127
+skills/ux-laws/SKILL.md
+  s_95f900475713a6::t_a874385c6f7266 1-139
+skills/vault-ingest/SKILL.md
+  s_95f900475713a6::t_7266b7d940cf54 1-86
+skills/vault-review/SKILL.md
+  s_95f900475713a6::t_09e658963c3756 1-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3a376b52c8115298c8ee81c7c19f75f119d36b86",
+  "prompts": {},
+  "sessions": {
+    "s_95f900475713a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ea9c1f18-633a-4ca9-89dd-54143b724c47",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Ryan Buswell <rbuswell93@gmail.com>"
+    }
+  }
+}
