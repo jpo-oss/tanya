@@ -10,7 +10,7 @@ This script copies GUIDE.md and, after each pointer, inserts the file's full
 text as a fenced code block, so you can hand one file to a fresh Claude Code
 session the way the original single-file guide worked.
 
-usage: bin/build-single-file [OUTPUT]      default: build/build-your-own-ea.md
+usage: bin/build-single-file [OUTPUT]      default: build/tanya.md
        bin/build-single-file -              write to stdout
 
 Standard library only. Exits non-zero if a pointer names a missing file.
@@ -39,7 +39,7 @@ def fence_for(text):
 
 
 def main():
-    out_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "build", "build-your-own-ea.md")
+    out_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "build", "tanya.md")
     lines = open(os.path.join(ROOT, "GUIDE.md"), encoding="utf-8").read().split("\n")
     result, missing, inlined = [], [], 0
     i = 0

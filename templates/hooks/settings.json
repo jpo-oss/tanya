@@ -25,16 +25,6 @@
             "statusMessage": "Checking git branch..."
           }
         ]
-      },
-      {
-        "matcher": "mcp__.*__createJiraIssue|mcp__.*__editJiraIssue",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/Users/<you>/.claude/hooks/jira-ticket-guard.sh",
-            "statusMessage": "Checking Jira ticket format..."
-          }
-        ]
       }
     ]
   }

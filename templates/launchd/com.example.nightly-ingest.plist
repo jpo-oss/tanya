@@ -5,6 +5,14 @@
   <key>Label</key><string>com.<name>.<job></string>
   <key>ProgramArguments</key>
   <array><string>/bin/bash</string><string>/Users/<you>/<Name>/bin/<job>.sh</string></array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ASSISTANT_HOME</key><string>/Users/<you>/<Name></string>
+    <key>VAULTS</key><string>/Users/<you>/<path-to-vaults-parent></string>
+    <key>ASSISTANT_NAME</key><string><Name></string>
+    <key>VAULT_NAMES</key><string><vault-a>:<vault-b></string>
+    <key>RUN_HOUR_UTC</key><string><two-digit UTC hour of your local midnight></string>
+  </dict>
   <key>StartCalendarInterval</key>
   <dict><key>Minute</key><integer>0</integer></dict>
   <key>StandardOutPath</key><string>/Users/<you>/<Name>/state/<job>/launchd.out</string>

@@ -2,4 +2,10 @@
 # One-screen health report for the Telegram gateway. Exit 0 healthy, 1 not.
 # `bin/tg-status json` prints the same as JSON; `bin/tg-status send CHAT TEXT`
 # sends a line through the gateway.
-exec /opt/homebrew/bin/bun "${0:A:h:h}/gateway/cli.ts" "${@:-status}"
+# The gateway finds its socket from ASSISTANT_NAME and ASSISTANT_HOME
+# (default Tanya, ~/Tanya); without them it would check the wrong assistant.
+if [[ -z ${ASSISTANT_NAME:-} && -z ${ASSISTANT_HOME:-} && ! -d ~/Tanya ]]; then
+  print -u2 "tg-status: set ASSISTANT_NAME and ASSISTANT_HOME, for example: ASSISTANT_NAME=Alex ASSISTANT_HOME=~/Alex bin/tg-status"
+  exit 1
+fi
+exec "${BUN:-$(command -v bun || echo /opt/homebrew/bin/bun)}" "${0:A:h:h}/gateway/cli.ts" "${@:-status}"
