@@ -1,0 +1,143 @@
+.gitignore
+  s_95f900475713a6::t_ba41a12b774bf3 1-5
+CONTRIBUTING.md
+  s_95f900475713a6::t_c4aab248d82811 1-40
+GUIDE.md
+  s_95f900475713a6::t_3aaa020d77e301 1-2270
+LICENSE
+  s_95f900475713a6::t_5d434e9fdf82a9 1-21
+README.md
+  s_95f900475713a6::t_507c1e57e5e300 1-77
+agents/developers/android-dev.md
+  s_95f900475713a6::t_878bc1bb720072 1-34
+agents/developers/azure-architect.md
+  s_95f900475713a6::t_eda46904434e2c 1-37
+agents/developers/backend-dev.md
+  s_95f900475713a6::t_53636cd9b97b03 1-34
+agents/developers/devops-cicd.md
+  s_95f900475713a6::t_61c471834e9217 1-36
+agents/developers/ios-dev.md
+  s_95f900475713a6::t_ddc134a2327f0d 1-34
+agents/developers/qa.md
+  s_95f900475713a6::t_7c1f94d207d616 1-37
+agents/developers/security.md
+  s_95f900475713a6::t_61bb91ca6632f9 1-33
+agents/developers/ui-ux-designer.md
+  s_95f900475713a6::t_8d70ceb4d5ce45 1-57
+agents/developers/web-frontend-dev.md
+  s_95f900475713a6::t_e0506aa99c167b 1-38
+bin/build-single-file
+  s_95f900475713a6::t_543abe12b9608b 1-78
+bin/fellow-poll.py
+  s_95f900475713a6::t_83f5b10e9815e1 1-251
+bin/fieldy-poll.py
+  s_95f900475713a6::t_4b8bb28b582834 1-353
+bin/nightly-ingest.sh
+  s_95f900475713a6::t_9ee9e4d667e86e 1-56
+bin/tg-status
+  s_95f900475713a6::t_f7412842c19535 1-5
+bin/tg-watchdog
+  s_95f900475713a6::t_56b127be76307d 1-223
+commands/run-dev-agents.md
+  s_95f900475713a6::t_957ab1b861747d 1-68
+gateway/bun.lock
+  s_95f900475713a6::t_62e0648aa88303 1-218
+gateway/channel.ts
+  s_95f900475713a6::t_94fd35e7453741 1-166
+gateway/cli.ts
+  s_95f900475713a6::t_4540562594076d 1-90
+gateway/client.ts
+  s_95f900475713a6::t_9ce4c774c99c44 1-98
+gateway/common.ts
+  s_95f900475713a6::t_1cd6e5e01a3508 1-110
+gateway/gateway.test.ts
+  s_95f900475713a6::t_98da2ffa32b22e 1-520
+gateway/gateway.ts
+  s_95f900475713a6::t_c8ac4206369144 1-728
+gateway/mcp.json
+  s_95f900475713a6::t_1eca91bbc188d2 1-8
+gateway/package.json
+  s_95f900475713a6::t_5a61e39705fcd1 1-14
+skills/idea/SKILL.md
+  s_95f900475713a6::t_514db0a28afa77 1-61
+skills/ingest-recordings/SKILL.md
+  s_95f900475713a6::t_823fae89485af4 1-123
+skills/jira-tickets/SKILL.md
+  s_95f900475713a6::t_717ef42df90d96 1-173
+skills/structured-git-commits/SKILL.md
+  s_95f900475713a6::t_932fa2e0c3c677 1-127
+skills/ux-laws/SKILL.md
+  s_95f900475713a6::t_6a001c0a95259a 1-139
+skills/vault-ingest/SKILL.md
+  s_95f900475713a6::t_66a508ad1c107b 1-86
+skills/vault-review/SKILL.md
+  s_95f900475713a6::t_a1e06597ead713 1-94
+templates/briefs/brief.md
+  s_95f900475713a6::t_9c262140fecd46 1-29
+templates/briefs/completion-note.md
+  s_95f900475713a6::t_5729996d371dbb 1-16
+templates/claude/dev-root-CLAUDE.md
+  s_95f900475713a6::t_20b947df0f1794 1-102
+templates/claude/global-CLAUDE.md
+  s_95f900475713a6::t_3c9914b9691bc8 1-29
+templates/claude/persona-CLAUDE.md
+  s_95f900475713a6::t_143266d4b8a887 1-102
+templates/env/fieldy.env.example
+  s_95f900475713a6::t_a3012a20785bf3 1-7
+templates/hooks/compact-reinject.sh
+  s_95f900475713a6::t_3ee37cabfd3bae 1-24
+templates/hooks/context-nudge.sh
+  s_95f900475713a6::t_1ca2e38cd71aed 1-37
+templates/hooks/settings-compact-reinject.json
+  s_95f900475713a6::t_e3ff280a42e852 1-16
+templates/hooks/settings.json
+  s_95f900475713a6::t_ae7f964272eb96 1-41
+templates/hooks/settings.local.json
+  s_95f900475713a6::t_68b66cb1ac9892 1-3
+templates/launchd/com.example.fellow-poll.plist
+  s_95f900475713a6::t_75efc4b6e67de6 1-13
+templates/launchd/com.example.fieldy-poll.plist
+  s_95f900475713a6::t_725a9eb2b6aa8e 1-13
+templates/launchd/com.example.nightly-ingest.plist
+  s_95f900475713a6::t_b66f00b54e48d8 1-14
+templates/launchd/com.example.telegram-gateway.plist
+  s_95f900475713a6::t_0ee48d01bf0572 1-21
+templates/launchd/com.example.telegram-watchdog.plist
+  s_95f900475713a6::t_e042b44609d05f 1-19
+templates/manifests/group.md
+  s_95f900475713a6::t_524fda56372814 1-16
+templates/manifests/project.md
+  s_95f900475713a6::t_92a28ce4b708c1 1-49
+templates/manifests/registry.example.json
+  s_95f900475713a6::t_e2142978493e50 1-51
+templates/manifests/venture-example.md
+  s_95f900475713a6::t_853c908426e680 1-26
+templates/manifests/venture.md
+  s_95f900475713a6::t_5ff6c479d6867f 1-24
+templates/shell/aliases.zsh
+  s_95f900475713a6::t_0d437ccfc4ae6f 1-12
+templates/vault/CLAUDE.md
+  s_95f900475713a6::t_fe9e87621882f9 1-139
+templates/vault/Idea.md
+  s_95f900475713a6::t_d31ad1ab1c84f3 1-19
+templates/vault/transcribe.sh
+  s_95f900475713a6::t_a3b2af635638c6 1-78
+templates/vault/whisper-glossary-rules.md
+  s_95f900475713a6::t_9dc695e0eee5ac 1-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a376245a2bbccee161936eecada03f6f4e3a3260",
+  "prompts": {},
+  "sessions": {
+    "s_95f900475713a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ea9c1f18-633a-4ca9-89dd-54143b724c47",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Ryan Buswell <rbuswell93@gmail.com>"
+    }
+  }
+}
