@@ -1,0 +1,19 @@
+README.md
+  s_95f900475713a6::t_9b31c41fd4e64b 10-11,18-20,23-25,45-56,59-64,68-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e2943a56e6358561be670166f31d29104432b498",
+  "prompts": {},
+  "sessions": {
+    "s_95f900475713a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ea9c1f18-633a-4ca9-89dd-54143b724c47",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Ryan Buswell <rbuswell93@gmail.com>"
+    }
+  }
+}
