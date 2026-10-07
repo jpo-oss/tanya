@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.<name>.telegram-gateway</string>
+  <key>ProgramArguments</key>
+  <array><string>/opt/homebrew/bin/bun</string><string>/Users/<you>/<Name>/gateway/gateway.ts</string></array>
+  <key>WorkingDirectory</key><string>/Users/<you>/<Name>/gateway</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>ASSISTANT_NAME</key><string><Name></string>
+    <key>TG_TIMEZONE</key><string><your IANA zone, for example Europe/London></string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/Users/<you>/<Name>/state/telegram/launchd.out</string>
+  <key>StandardErrorPath</key><string>/Users/<you>/<Name>/state/telegram/launchd.err</string>
+</dict>
+</plist>

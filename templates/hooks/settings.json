@@ -1,0 +1,41 @@
+{
+  "autoCompactWindow": 400000,
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.claude/statusline.sh"
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/<you>/.claude/hooks/context-nudge.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/<you>/.claude/hooks/enforce-feature-branch.sh",
+            "statusMessage": "Checking git branch..."
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*__createJiraIssue|mcp__.*__editJiraIssue",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/<you>/.claude/hooks/jira-ticket-guard.sh",
+            "statusMessage": "Checking Jira ticket format..."
+          }
+        ]
+      }
+    ]
+  }
+}

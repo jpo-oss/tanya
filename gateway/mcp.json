@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "<name>-telegram": {
+      "command": "/opt/homebrew/bin/bun",
+      "args": ["/Users/<you>/<Name>/gateway/channel.ts"]
+    }
+  }
+}

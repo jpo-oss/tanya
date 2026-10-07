@@ -1,0 +1,51 @@
+{
+  "ventures": {
+    "<slug>": {
+      "kind": "venture",
+      "slug": "<slug>",
+      "name": "<Display Name>",
+      "description": "<one line>",
+      "vault": "/Users/<you>/Dev/<Personal>/_obsidian/<Vault>",
+      "vault_schema": "<schema>",
+      "hub": "<Hub note>",
+      "jira": { "site": "<your-site>.atlassian.net", "project": "<KEY>" },
+      "github_owner": "<your-github-owner>",
+      "default_stack": [],
+      "hosting": "unknown",
+      "secrets": "unknown",
+      "dev_root": "/Users/<you>/Dev/<Group>",
+      "status": "active",
+      "projects": ["<project slug>"]
+    }
+  },
+  "groups": {
+    "<slug>": {
+      "kind": "group",
+      "slug": "<slug>",
+      "name": "<Display Name>",
+      "ventures": ["<slug>", "<slug>"],
+      "github_owners": ["<your-github-owner>"],
+      "dev_root": "/Users/<you>/Dev/<Group>",
+      "path": "/Users/<you>/Dev/<Group>",
+      "projects": ["<project slug>", "<project slug>"]
+    }
+  },
+  "projects": {
+    "<project slug>": {
+      "kind": "project",
+      "project": "<project slug>",
+      "venture": "<venture slug>",
+      "name": "<Display Name>",
+      "description": "<one line>",
+      "status": "active",
+      "repos": [],
+      "stack": ["python"],
+      "jira": { "project": "<KEY>", "component": "" },
+      "hosting": "none",
+      "path": "/Users/<you>/Dev/<Group>/<Project>",
+      "group": "<group slug>"
+    }
+  },
+  "unmanaged": [],
+  "unlisted": ["/Users/<you>/Dev/<Personal>/_obsidian"]
+}

@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""Rebuild the guide as one Markdown file, with every linked file inlined.
+
+GUIDE.md points at real files with a two-line pointer:
+
+    - **File:** [`templates/claude/global-CLAUDE.md`](templates/claude/global-CLAUDE.md), installed at ...
+    - **Change:** ...
+
+This script copies GUIDE.md and, after each pointer, inserts the file's full
+text as a fenced code block, so you can hand one file to a fresh Claude Code
+session the way the original single-file guide worked.
+
+usage: bin/build-single-file [OUTPUT]      default: build/build-your-own-ea.md
+       bin/build-single-file -              write to stdout
+
+Standard library only. Exits non-zero if a pointer names a missing file.
+"""
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+POINTER = re.compile(r"^- \*\*File:\*\* \[`([^`]+)`\]")
+LANG = {
+    ".md": "markdown", ".sh": "bash", ".zsh": "bash", ".py": "python",
+    ".json": "json", ".plist": "xml", ".ts": "typescript", ".example": "bash",
+}
+
+
+def lang_for(path):
+    if os.path.basename(path).startswith(("build-single-file", "tg-")):
+        return ""
+    return LANG.get(os.path.splitext(path)[1], "")
+
+
+def fence_for(text):
+    longest = max((len(m) for m in re.findall(r"`{3,}", text)), default=0)
+    return "`" * max(3, longest + 1)
+
+
+def main():
+    out_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "build", "build-your-own-ea.md")
+    lines = open(os.path.join(ROOT, "GUIDE.md"), encoding="utf-8").read().split("\n")
+    result, missing, inlined = [], [], 0
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        result.append(line)
+        m = POINTER.match(line)
+        if m:
+            # Keep the Change line with its pointer, then inline the file.
+            if i + 1 < len(lines) and lines[i + 1].startswith("- **Change:**"):
+                i += 1
+                result.append(lines[i])
+            rel = m.group(1)
+            full = os.path.join(ROOT, rel)
+            if not os.path.isfile(full):
+                missing.append(rel)
+            else:
+                text = open(full, encoding="utf-8").read().rstrip("\n")
+                fence = fence_for(text)
+                result += ["", fence + lang_for(rel), text, fence]
+                inlined += 1
+        i += 1
+    if missing:
+        sys.exit("missing files: " + ", ".join(missing))
+    doc = "\n".join(result).rstrip("\n") + "\n"
+    if out_path == "-":
+        sys.stdout.write(doc)
+    else:
+        os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(doc)
+        print(f"wrote {out_path}: {doc.count(chr(10))} lines, {inlined} files inlined", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

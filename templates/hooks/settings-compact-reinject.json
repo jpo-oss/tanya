@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/<you>/<Name>/.claude/hooks-compact-reinject.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

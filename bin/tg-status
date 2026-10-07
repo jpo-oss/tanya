@@ -1,0 +1,5 @@
+#!/bin/zsh
+# One-screen health report for the Telegram gateway. Exit 0 healthy, 1 not.
+# `bin/tg-status json` prints the same as JSON; `bin/tg-status send CHAT TEXT`
+# sends a line through the gateway.
+exec /opt/homebrew/bin/bun "${0:A:h:h}/gateway/cli.ts" "${@:-status}"

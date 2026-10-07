@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Watch the Telegram gateway from outside and shout when it is down.
+
+launchd runs this every 5 minutes (config/launchd/com.<name>.telegram-watchdog.plist).
+The gateway tells the owner about a dropped assistant session by itself; this script
+covers the case the gateway cannot report: the gateway being the thing
+that is broken.
+
+Each run:
+  1. Ask the gateway for its status (bin/tg-status json). Healthy means the
+     socket answers and Telegram was polled successfully in the last 2 min.
+  2. Unhealthy: restart it through launchd, wait, ask again.
+  3. Restart fixed it: tell the owner on Telegram that it happened.
+  4. Still unhealthy: alert the owner by iMessage AND by a direct Telegram Bot
+     API call (sending does not need the poller), at most once per 30 min.
+  5. Healthy again after an alert: say so by the same two routes.
+
+  bin/tg-watchdog          one check, as launchd runs it
+  bin/tg-watchdog --test   send a test alert by both routes, change nothing
+
+The iMessage goes to the number or Apple ID in TG_ALERT_NUMBER_FILE, default
+~/.config/<name>/alert-number (one line, kept out of the repo). It is sent by
+the script named in TG_WATCHDOG_IMSG (default bin/imsg.py, not included here:
+any script that takes `--to NUMBER TEXT --send` works). Without the number
+file, or without the script, only Telegram is used.
+
+Change for your setup (environment variables in the launchd plist):
+  ASSISTANT_NAME, ASSISTANT_HOME, TG_TIMEZONE, TG_MACHINE_LABEL, and BUN if
+  bun is not at /opt/homebrew/bin/bun.
+The bot token is read from the bot's .env and never printed or logged.
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.request
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+
+HOME = Path.home()
+REPO = Path(__file__).resolve().parent.parent
+EA_NAME = os.environ.get("ASSISTANT_NAME", "Tanya")
+SLUG = "".join(c if c.isalnum() else "-" for c in EA_NAME.lower())
+EA_HOME = Path(os.environ.get("ASSISTANT_HOME", HOME / EA_NAME))
+MACHINE = os.environ.get("TG_MACHINE_LABEL", "the Mac")
+BOT_DIR = Path(os.environ.get("TELEGRAM_STATE_DIR", HOME / f".claude/channels/telegram-{SLUG}"))
+GW_DIR = Path(os.environ.get("TG_GATEWAY_DIR", EA_HOME / "state/telegram"))
+API_ROOT = os.environ.get("TELEGRAM_API_ROOT", "https://api.telegram.org")
+ALERT_NUMBER = Path(os.environ.get("TG_ALERT_NUMBER_FILE", HOME / f".config/{SLUG}/alert-number"))
+# Overridable so the tests can stub the text message and skip launchctl.
+IMSG = os.environ.get("TG_WATCHDOG_IMSG", str(REPO / "bin/imsg.py"))
+RESTART_WAIT_S = float(os.environ.get("TG_WATCHDOG_RESTART_WAIT_S", "25"))
+NO_RESTART = os.environ.get("TG_WATCHDOG_NO_RESTART") == "1"
+
+BUN = os.environ.get("BUN", "/opt/homebrew/bin/bun")
+LABEL = os.environ.get("TG_LAUNCHD_LABEL", f"com.{SLUG}.telegram-gateway")
+STATE = GW_DIR / "watchdog.json"
+LOG = GW_DIR / "watchdog.log"
+REALERT_S = 30 * 60
+SIGNATURE = os.environ.get("TG_SIGNATURE", f"- EA {EA_NAME}")
+
+
+def log(msg: str) -> None:
+    GW_DIR.mkdir(parents=True, exist_ok=True)
+    with LOG.open("a") as f:
+        f.write(f"{datetime.now(timezone.utc).isoformat(timespec='seconds')} {msg}\n")
+
+
+def local_now() -> str:
+    """The owner's wall clock: TG_TIMEZONE (an IANA zone), else the system zone."""
+    tz = os.environ.get("TG_TIMEZONE")
+    if tz:
+        try:
+            from zoneinfo import ZoneInfo
+            return datetime.now(ZoneInfo(tz)).strftime("%H:%M")
+        except Exception:
+            pass
+    return datetime.now().astimezone().strftime("%H:%M")
+
+
+def status() -> dict:
+    """The gateway's own health report; a dict with healthy=False if it cannot be had."""
+    try:
+        out = subprocess.run(
+            [BUN, str(REPO / "gateway/cli.ts"), "json"],
+            capture_output=True, text=True, timeout=30,
+        ).stdout
+        return json.loads(out.strip().splitlines()[-1])
+    except Exception as e:  # noqa: BLE001 - any failure here means "not healthy"
+        return {"healthy": False, "gateway": "unknown", "reason": f"status check failed: {e}"}
+
+
+def restart() -> None:
+    if NO_RESTART:
+        return
+    subprocess.run(
+        ["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{LABEL}"],
+        capture_output=True, timeout=30,
+    )
+    time.sleep(RESTART_WAIT_S)
+
+
+def token() -> str | None:
+    try:
+        for line in (BOT_DIR / ".env").read_text().splitlines():
+            if line.startswith("TELEGRAM_BOT_TOKEN="):
+                return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return None
+
+
+def owners() -> list[str]:
+    try:
+        return json.loads((BOT_DIR / "access.json").read_text()).get("allowFrom", [])
+    except (OSError, ValueError):
+        return []
+
+
+def telegram_direct(text: str) -> bool:
+    """Send without the gateway. Works while the poller is dead; fails if the network is."""
+    tok = token()
+    if not tok:
+        return False
+    sent = False
+    for chat in owners():
+        req = urllib.request.Request(
+            f"{API_ROOT}/bot{tok}/sendMessage",
+            data=json.dumps({"chat_id": chat, "text": f"{text}\n{SIGNATURE}"}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            urllib.request.urlopen(req, timeout=20).read()
+            sent = True
+        except Exception as e:  # noqa: BLE001
+            # str(e) can carry the request URL, which holds the token: log the type only.
+            log(f"direct Telegram send failed: {type(e).__name__}")
+    return sent
+
+
+def imessage(text: str) -> bool:
+    try:
+        to = ALERT_NUMBER.read_text().strip()
+    except OSError:
+        log(f"no iMessage alert: {ALERT_NUMBER} does not exist")
+        return False
+    if not to:
+        return False
+    # The text script appends its own signature.
+    r = subprocess.run([IMSG, "--to", to, text, "--send"], capture_output=True, text=True, timeout=120)
+    if r.returncode != 0:
+        log(f"iMessage alert failed (exit {r.returncode})")
+    return r.returncode == 0
+
+
+def alert(text: str) -> None:
+    by_text = imessage(text)
+    by_tg = telegram_direct(text)
+    log(f"alert sent: imessage={by_text} telegram={by_tg}")
+    if not (by_text or by_tg):
+        log("ALERT COULD NOT BE DELIVERED BY ANY ROUTE")
+
+
+def load_state() -> dict:
+    try:
+        return json.loads(STATE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(s: dict) -> None:
+    GW_DIR.mkdir(parents=True, exist_ok=True)
+    STATE.write_text(json.dumps(s) + "\n")
+
+
+def main() -> int:
+    if "--test" in sys.argv:
+        alert(f"Test alert from the Telegram watchdog at {local_now()}. Nothing is wrong.")
+        print("test alert sent; see", LOG)
+        return 0
+
+    state = load_state()
+    s = status()
+
+    if s.get("healthy"):
+        if state.get("alerted_at"):
+            alert(f"The Telegram gateway is working again as of {local_now()}.")
+            save_state({})
+        return 0
+
+    reason = s.get("reason", "unknown")
+    log(f"unhealthy: gateway={s.get('gateway')} reason={reason}; restarting")
+    restart()
+    s = status()
+
+    if s.get("healthy"):
+        log("restart fixed it")
+        if not state.get("alerted_at"):
+            telegram_direct(
+                f"The Telegram gateway stopped ({reason}) and was restarted automatically at "
+                f"{local_now()}. Saved messages are intact."
+            )
+        else:
+            alert(f"The Telegram gateway is working again as of {local_now()}.")
+        save_state({})
+        return 0
+
+    reason = s.get("reason", reason)
+    if time.time() - state.get("alerted_at", 0) >= REALERT_S:
+        alert(
+            f"{EA_NAME}'s Telegram gateway is down on {MACHINE} as of {local_now()} ({reason}). "
+            f"An automatic restart did not fix it. Telegram messages may not reach {EA_NAME}. "
+            f"On {MACHINE} run: bin/tg-status"
+        )
+        save_state({"alerted_at": time.time(), "reason": reason})
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
