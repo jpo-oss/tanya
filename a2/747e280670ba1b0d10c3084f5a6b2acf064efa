@@ -1,0 +1,43 @@
+bin/tg-status
+  s_95f900475713a6::t_ba3517fc1ee1a5 1-5
+bin/tg-watchdog
+  s_95f900475713a6::t_d9fd4866512e10 1-223
+gateway/bun.lock
+  s_95f900475713a6::t_3de5ea506209cb 1-218
+gateway/channel.ts
+  s_95f900475713a6::t_181a3a466b857f 1-166
+gateway/cli.ts
+  s_95f900475713a6::t_3ac3d2194b6af2 1-90
+gateway/client.ts
+  s_95f900475713a6::t_6a41fc9e9ef2f2 1-98
+gateway/common.ts
+  s_95f900475713a6::t_060e776654c2cc 1-110
+gateway/gateway.test.ts
+  s_95f900475713a6::t_de480a437abaae 1-520
+gateway/gateway.ts
+  s_95f900475713a6::t_240cce4e545d3e 1-728
+gateway/mcp.json
+  s_95f900475713a6::t_67fe66e3a3e734 1-8
+gateway/package.json
+  s_95f900475713a6::t_bb8c28c362a8c8 1-14
+templates/launchd/com.example.telegram-gateway.plist
+  s_95f900475713a6::t_2b7384e9d1c4e5 1-21
+templates/launchd/com.example.telegram-watchdog.plist
+  s_95f900475713a6::t_7959e4f41f1ee3 1-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a2747e280670ba1b0d10c3084f5a6b2acf064efa",
+  "prompts": {},
+  "sessions": {
+    "s_95f900475713a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ea9c1f18-633a-4ca9-89dd-54143b724c47",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Ryan Buswell <rbuswell93@gmail.com>"
+    }
+  }
+}
