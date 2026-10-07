@@ -53,7 +53,7 @@ Find the next number for a prefix (replace `PREFIX`):
 ```bash
 git log --pretty=format:%s | grep -oE '^PREFIX-[0-9]+' | grep -oE '[0-9]+$' | sort -n | tail -1
 ```
-Add 1 to the result. If it returns nothing, this is the first — start at `1`.
+Add 1 to the result. If it returns nothing, this is the first; start at `1`.
 
 ## The Body (full handoff notes)
 
@@ -62,11 +62,11 @@ Every commit body MUST contain these sections, in this order:
 ```
 What:  <what changed, in plain language>
 Why:   <the reason / goal / problem being solved>
-How:   <how it works — key approach, decisions, anything non-obvious>
+How:   <how it works: key approach, decisions, anything non-obvious>
 
 Files:
-- path/to/file — what changed here and why
-- path/to/other — ...
+- path/to/file: what changed here and why
+- path/to/other: ...
 
 Follow-ups:
 - <known gaps, TODOs, risks, or "none">
@@ -89,9 +89,9 @@ How:   Generates a signed, 30-min-expiry token, stores its hash in the
        password_resets table, and sends the link via the existing mailer.
 
 Files:
-- src/routes/auth.js — added the /auth/reset route and validation
-- src/services/resetToken.js — new: token generation + verification
-- migrations/007_password_resets.sql — new table for reset tokens
+- src/routes/auth.js: added the /auth/reset route and validation
+- src/services/resetToken.js: new: token generation + verification
+- migrations/007_password_resets.sql: new table for reset tokens
 
 Follow-ups:
 - Rate-limiting on the endpoint is not yet added (abuse risk)
@@ -110,7 +110,7 @@ Co-Authored-By: <model name> <noreply@anthropic.com>
 
 | Step | Action |
 |------|--------|
-| 1 | `git status` / `git diff` — know what changed |
+| 1 | `git status` / `git diff`: know what changed |
 | 2 | List existing prefixes; reuse the matching one, or pick a new area name |
 | 3 | Find the highest number for that prefix; add 1 |
 | 4 | Write subject: `prefix-number: summary` |
@@ -119,9 +119,9 @@ Co-Authored-By: <model name> <noreply@anthropic.com>
 
 ## Common Mistakes
 
-- **Skipping the body on "small" changes** — every commit gets full notes. Small changes still need a Why.
-- **Inventing a new prefix when one already fits** — always check existing prefixes first.
-- **Sharing one counter across prefixes** — each prefix increments independently.
-- **Vague summaries** ("fixes", "updates") — say what and where: `ui-3: Fix overlapping labels on mobile nav`.
-- **Listing files without saying why** — each file line explains the change, not just the path.
-- **Omitting Follow-ups** — if none, write `- none`; never leave it out.
+- **Skipping the body on "small" changes**: every commit gets full notes. Small changes still need a Why.
+- **Inventing a new prefix when one already fits**: always check existing prefixes first.
+- **Sharing one counter across prefixes**: each prefix increments independently.
+- **Vague summaries** ("fixes", "updates"): say what and where: `ui-3: Fix overlapping labels on mobile nav`.
+- **Listing files without saying why**: each file line explains the change, not just the path.
+- **Omitting Follow-ups**: if none, write `- none`; never leave it out.

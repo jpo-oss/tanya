@@ -105,7 +105,7 @@ Paste this into the screen's section of `docs/02-design/` and fill it in. A
 dash is not an answer.
 
 ```
-UX laws check — <screen or flow name>
+UX laws check: <screen or flow name>
 Fitts     primary action: <element>, <size>; smallest target: <element>, <size>
 Hick      options at each decision point: <n, n, n>; primary CTAs: <n>
 Zeigarnik what shows unfinished state: <where> (or "single-step, n/a")

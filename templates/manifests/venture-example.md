@@ -2,7 +2,7 @@
 kind: venture
 slug: nebulosity
 name: Nebulosity
-description: Wyoming LLC housing the software portfolio; nothing shipped to an app store yet.
+description: Software holding company for the app portfolio; nothing shipped to an app store yet.
 vault: "/Users/<you>/Dev/<Personal>/_obsidian/Silo 1"
 vault_schema: silo1
 hub: Nebulosity

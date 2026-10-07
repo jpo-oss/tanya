@@ -1,6 +1,6 @@
 ---
 name: idea
-description: Use when <Person> has a new idea to park, says "/idea", "park this", "new idea", or asks to see parked ideas ("/idea list", "what's parked"). Writes exactly one note into the right vault's Ideas/ folder and nothing else.
+description: Use when the owner has a new idea to park, says "/idea", "park this", "new idea", or asks to see parked ideas ("/idea list", "what's parked"). Writes exactly one note into the right vault's Ideas/ folder and nothing else.
 ---
 
 # /idea, park an idea
