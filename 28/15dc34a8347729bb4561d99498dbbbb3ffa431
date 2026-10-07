@@ -1,0 +1,23 @@
+LICENSE
+  s_95f900475713a6::t_0d11a9b25e6c77 1-21
+README.md
+  s_95f900475713a6::t_3e0a8943b7f98d 1-58
+GUIDE.md
+  s_95f900475713a6::t_c4fb06b8939d93 1-4376
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2815dc34a8347729bb4561d99498dbbbb3ffa431",
+  "prompts": {},
+  "sessions": {
+    "s_95f900475713a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ea9c1f18-633a-4ca9-89dd-54143b724c47",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Ryan Buswell <rbuswell93@gmail.com>"
+    }
+  }
+}
