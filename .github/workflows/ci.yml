@@ -21,7 +21,9 @@ jobs:
       - run: env -u TELEGRAM_BOT_TOKEN bun test
 
   scripts:
-    runs-on: ubuntu-latest
+    # Python 3.9 builds for setup-python stop at Ubuntu 24.04, and
+    # ubuntu-latest is now 26.04, so this job pins the older image.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The system Python on macOS is 3.9, so the scripts must parse there.
